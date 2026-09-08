@@ -1,0 +1,34 @@
+# Agent-Native ERP — POC Step 1: Odoo 19 Community + PostgreSQL 15
+# Spec: 02-poc/TECHNICAL_DESIGN.md §14 (odoo:19.0 tag verified on Docker Hub,
+# last pushed 2026-08-20, amd64/arm64).
+# Gateway store is a local SQLite file (data/poc_gateway.db) — NO gateway
+# container, per locked POC scope (DECISIONS.md ADR-03). Do not add a second
+# PostgreSQL service for the gateway.
+
+services:
+  odoo:
+    image: odoo:19.0
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./odoo-config:/etc/odoo
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+    volumes:
+      - odoo_db_data:/var/lib/postgresql/data
+
+volumes:
+  odoo_data:
+  odoo_db_data:

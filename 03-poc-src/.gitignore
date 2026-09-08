@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+
+# Gateway SQLite store (incl. WAL sidecars)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/

@@ -1,0 +1,1 @@
+# Gateway SQLite store lives here (data/poc_gateway.db + WAL sidecars). Gitignored.

@@ -1,0 +1,322 @@
+{
+  "before_orders": {
+    "status": 200,
+    "body": [
+      {
+        "id": 25
+      }
+    ]
+  },
+  "test1_sales_customer_read": {
+    "status": 200,
+    "body": [
+      {
+        "id": 9,
+        "name": "Acme Corporation"
+      },
+      {
+        "id": 15,
+        "name": "Azure Interior"
+      },
+      {
+        "id": 13,
+        "name": "LightsUp"
+      },
+      {
+        "id": 12,
+        "name": "OpenWood"
+      }
+    ]
+  },
+  "test2_readonly_customer_read": {
+    "status": 200,
+    "body": [
+      {
+        "id": 9,
+        "name": "Acme Corporation"
+      },
+      {
+        "id": 15,
+        "name": "Azure Interior"
+      },
+      {
+        "id": 13,
+        "name": "LightsUp"
+      },
+      {
+        "id": 12,
+        "name": "OpenWood"
+      }
+    ]
+  },
+  "test3_sales_product_read": {
+    "status": 200,
+    "body": [
+      {
+        "id": 15,
+        "name": "Customizable Desk"
+      },
+      {
+        "id": 18,
+        "name": "Customizable Desk"
+      },
+      {
+        "id": 46,
+        "name": "Local Delivery"
+      },
+      {
+        "id": 19,
+        "name": "Corner Desk Right Sit"
+      },
+      {
+        "id": 20,
+        "name": "Large Cabinet"
+      },
+      {
+        "id": 21,
+        "name": "Storage Box"
+      },
+      {
+        "id": 26,
+        "name": "Pedal Bin"
+      },
+      {
+        "id": 27,
+        "name": "Cabinet with Doors"
+      },
+      {
+        "id": 29,
+        "name": "Conference Chair"
+      },
+      {
+        "id": 30,
+        "name": "Conference Chair"
+      },
+      {
+        "id": 49,
+        "name": "Desk Organizer"
+      },
+      {
+        "id": 50,
+        "name": "Desk Pad"
+      },
+      {
+        "id": 51,
+        "name": "Monitor Stand"
+      },
+      {
+        "id": 13,
+        "name": "Customizable Desk"
+      },
+      {
+        "id": 16,
+        "name": "Customizable Desk"
+      },
+      {
+        "id": 14,
+        "name": "Customizable Desk"
+      },
+      {
+        "id": 31,
+        "name": "Office Chair Black"
+      },
+      {
+        "id": 36,
+        "name": "Individual Workplace"
+      },
+      {
+        "id": 32,
+        "name": "Corner Desk Left Sit"
+      },
+      {
+        "id": 53,
+        "name": "Cable Management Box"
+      },
+      {
+        "id": 37,
+        "name": "Acoustic Bloc Screens"
+      },
+      {
+        "id": 38,
+        "name": "Acoustic Bloc Screens"
+      },
+      {
+        "id": 41,
+        "name": "Large Meeting Table"
+      },
+      {
+        "id": 5,
+        "name": "Office Chair"
+      },
+      {
+        "id": 8,
+        "name": "Desk Combination"
+      },
+      {
+        "id": 35,
+        "name": "Desk Stand with Screen"
+      },
+      {
+        "id": 40,
+        "name": "Four Person Desk"
+      },
+      {
+        "id": 39,
+        "name": "Drawer"
+      },
+      {
+        "id": 6,
+        "name": "Office Lamp"
+      },
+      {
+        "id": 33,
+        "name": "Drawer Black"
+      },
+      {
+        "id": 34,
+        "name": "Flipover"
+      },
+      {
+        "id": 7,
+        "name": "Office Design Software"
+      },
+      {
+        "id": 55,
+        "name": "Chair floor protection"
+      },
+      {
+        "id": 54,
+        "name": "Deposit"
+      },
+      {
+        "id": 47,
+        "name": "Furniture Assembly"
+      },
+      {
+        "id": 2,
+        "name": "Hotel Accommodation"
+      },
+      {
+        "id": 23,
+        "name": "Large Desk"
+      },
+      {
+        "id": 24,
+        "name": "Large Desk"
+      },
+      {
+        "id": 25,
+        "name": "Large Desk"
+      },
+      {
+        "id": 52,
+        "name": "Office Combo"
+      },
+      {
+        "id": 48,
+        "name": "Outdoor dining table"
+      },
+      {
+        "id": 1,
+        "name": "Restaurant Expenses"
+      },
+      {
+        "id": 43,
+        "name": "Two-Seat Sofa"
+      },
+      {
+        "id": 44,
+        "name": "Two-Seat Sofa"
+      },
+      {
+        "id": 45,
+        "name": "Two-Seat Sofa"
+      },
+      {
+        "id": 4,
+        "name": "Virtual Home Staging"
+      },
+      {
+        "id": 3,
+        "name": "Virtual Interior Design"
+      }
+    ]
+  },
+  "test4_sales_order_create": {
+    "status": 200,
+    "body": [
+      26
+    ]
+  },
+  "test4_order_read": {
+    "status": 200,
+    "body": [
+      {
+        "id": 26,
+        "name": "S00026",
+        "partner_id": [
+          9,
+          "Acme Corporation"
+        ],
+        "state": "draft",
+        "order_line": [
+          52
+        ]
+      }
+    ]
+  },
+  "test4_order_lines_read": {
+    "status": 200,
+    "body": [
+      {
+        "id": 52,
+        "product_id": [
+          15,
+          "[DESK0005] Customizable Desk (White, Custom)"
+        ],
+        "product_uom_qty": 1.0
+      }
+    ]
+  },
+  "probe": {
+    "label": "STEP_2_PROBE_ORDER",
+    "client_order_ref": "STEP2-PROBE-7460960d"
+  },
+  "test5_readonly_create_denial": {
+    "status": 403,
+    "body": {
+      "name": "odoo.exceptions.AccessError",
+      "message": "You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary.",
+      "arguments": [
+        "You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary."
+      ],
+      "context": {},
+      "debug": "Traceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2329, in _serve_db\n    return service_model.retrying(serve_func, env=self.env)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/service/model.py\", line 188, in retrying\n    result = func()\n             ^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2384, in _serve_ir_http\n    response = self.dispatcher.dispatch(rule.endpoint, args)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2664, in dispatch\n    result = self.request.registry['ir.http']._dispatch(endpoint)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/base/models/ir_http.py\", line 353, in _dispatch\n    result = endpoint(**request.params)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 838, in route_wrapper\n    result = endpoint(self, *args, **params_ok)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/rpc/controllers/json2.py\", line 86, in web_json_2_rpc\n    result = func(records, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/sale/models/sale_order.py\", line 1014, in create\n    return super().create(vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/mail/models/mail_thread.py\", line 328, in create\n    threads = super(MailThread, self).create(vals_list)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/models.py\", line 4640, in create\n    self.check_access('create')\n  File \"/usr/lib/python3/dist-packages/odoo/orm/models.py\", line 4115, in check_access\n    raise result[1]()\nodoo.exceptions.AccessError: You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary.\n"
+    }
+  },
+  "test6_no_access_create_denial": {
+    "status": 403,
+    "body": {
+      "name": "odoo.exceptions.AccessError",
+      "message": "You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary.",
+      "arguments": [
+        "You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary."
+      ],
+      "context": {},
+      "debug": "Traceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2329, in _serve_db\n    return service_model.retrying(serve_func, env=self.env)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/service/model.py\", line 188, in retrying\n    result = func()\n             ^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2384, in _serve_ir_http\n    response = self.dispatcher.dispatch(rule.endpoint, args)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 2664, in dispatch\n    result = self.request.registry['ir.http']._dispatch(endpoint)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/base/models/ir_http.py\", line 353, in _dispatch\n    result = endpoint(**request.params)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/http.py\", line 838, in route_wrapper\n    result = endpoint(self, *args, **params_ok)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/rpc/controllers/json2.py\", line 86, in web_json_2_rpc\n    result = func(records, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/sale/models/sale_order.py\", line 1014, in create\n    return super().create(vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/addons/mail/models/mail_thread.py\", line 328, in create\n    threads = super(MailThread, self).create(vals_list)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/decorators.py\", line 369, in create\n    return method(self, vals_list)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/odoo/orm/models.py\", line 4640, in create\n    self.check_access('create')\n  File \"/usr/lib/python3/dist-packages/odoo/orm/models.py\", line 4115, in check_access\n    raise result[1]()\nodoo.exceptions.AccessError: You are not allowed to create 'Sales Order' (sale.order) records.\n\nThis operation is allowed for the following groups:\n\t- Sales/Administrator\n\t- Sales/User: Own Documents Only\n\nContact your administrator to request access if necessary.\n"
+    }
+  },
+  "after_orders": {
+    "status": 200,
+    "body": [
+      {
+        "id": 26,
+        "client_order_ref": "STEP2-PROBE-7460960d"
+      },
+      {
+        "id": 25,
+        "client_order_ref": "STEP2-PROBE-73b86e4d"
+      }
+    ]
+  }
+}

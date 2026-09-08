@@ -1,0 +1,13 @@
+﻿*** Begin Patch
+*** Update File: TECHNICAL_DESIGN.md
+@@
+-**Date:** 7 September 2026 (architecture correction pass: gateway store aligned to PostgreSQL 15+ per the authoritative research package — deviation to SQLite was considered and rejected, see `DECISIONS.md` ADR-03; trust-boundary caveat added; operation_hash binds tool_version; idempotency split into correlation ID vs. dedup key; re-authorization at confirmation execution; verification semantics clarified; entity-resolution split defined)
++**Date:** 7 September 2026 (architecture correction pass: gateway store confirmed as SQLite (WAL mode) per locked POC scope; trust-boundary caveat added; operation_hash binds tool_version; idempotency split into correlation ID vs. dedup key; re-authorization at confirmation execution; verification semantics clarified; entity-resolution split defined)
+@@
+-| Audit Store | Docker container `gateway-db` (PostgreSQL 16, port 5433) | PostgreSQL 15+ | **Conforms to the authoritative research package** (research-report §E). Enables a control SQLite cannot express: the app role `poc_app` holds INSERT/SELECT only on `audit_log` — UPDATE/DELETE is granted to no role, so append-only audit is database-enforced, not code-discipline-enforced. |
+-| Idempotency Store | Same `gateway-db` container | PostgreSQL | Same transaction scope as audit; `INSERT ... ON CONFLICT DO NOTHING` provides the test-and-set required for exactly-once concurrent execution (see §7). |
+-| Proposal Store | Same `gateway-db` container | PostgreSQL | Confirmation lifecycle state machine (see §5a); one schema, three tables. |
++| Audit Store | SQLite file `data/poc_gateway.db` (WAL mode) | Python stdlib `sqlite3` | Zero-infrastructure append-only audit table with hash chain. WAL mode provides concurrent read + single-writer. Append-only is code-discipline-enforced (no UPDATE/DELETE calls in `audit.py`); production migrates to a database-enforced role. |
++| Idempotency Store | Same SQLite file `data/poc_gateway.db` | Python stdlib `sqlite3` | Same file as audit; `INSERT OR IGNORE` provides the test-and-set required for exactly-once concurrent execution (see §7). |
++| Proposal Store | Same SQLite file `data/poc_gateway.db` | Python stdlib `sqlite3` | Confirmation lifecycle state machine (see §5a); one file, three tables. |
+*** End Patch
