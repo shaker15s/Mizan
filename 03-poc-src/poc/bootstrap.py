@@ -25,15 +25,22 @@ _ODOO_API_KEY_VARS = {
 }
 
 
+def _required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise ValueError(f"{name} must be configured in the environment or .env file.")
+    return value
+
+
 def _build_odoo_client(user_id: str, tenant_id: str):
     """Build the user-specific ERP client inside the server-owned boundary."""
     api_key_variable = _ODOO_API_KEY_VARS.get(user_id)
     if api_key_variable is None:
         raise ValueError("No ERP credentials are configured for this POC user.")
     config = OdooConfig(
-        url=os.environ["ODOO_URL"],
-        database=os.environ["ODOO_DATABASE"],
-        api_key=os.environ[api_key_variable],
+        url=_required_env("ODOO_URL"),
+        database=_required_env("ODOO_DATABASE"),
+        api_key=_required_env(api_key_variable),
     )
     return OdooJSON2Client(config)
 

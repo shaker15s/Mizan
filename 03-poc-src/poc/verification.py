@@ -41,7 +41,7 @@ def verify_sales_order_creation(
     them through the canonical error taxonomy instead of inventing another
     failure layer.
     """
-    fields = ["partner_id", "state", "amount_total", "order_line", "client_order_ref"]
+    fields = ["partner_id", "state", "amount_total", "amount_untaxed", "order_line", "client_order_ref"]
     records = client.read("sale.order", [order_id], fields)
     if not records:
         return VerificationResult(
@@ -71,7 +71,13 @@ def verify_sales_order_creation(
     if isinstance(actual_amount_total, bool) or not isinstance(actual_amount_total, (int, float)):
         return VerificationResult(passed=False, error="Sales order total is missing or invalid.")
     if expected_amount_total is not None:
-        if Decimal(str(actual_amount_total)) != Decimal(str(expected_amount_total)):
+        # Compare against the tax-exclusive total: taxes and pricelist rules are
+        # Odoo-owned, so amount_total can legitimately differ from the sum of
+        # list_price x qty while the untaxed total may not (B5 fix).
+        reference = order.get("amount_untaxed")
+        if isinstance(reference, bool) or not isinstance(reference, (int, float)):
+            reference = actual_amount_total
+        if Decimal(str(reference)) != Decimal(str(expected_amount_total)):
             return VerificationResult(
                 passed=False,
                 error="Sales order total does not match the authorized operation.",

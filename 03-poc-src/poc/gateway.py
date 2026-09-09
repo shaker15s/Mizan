@@ -31,9 +31,12 @@ from poc.confirmation import (
 )
 from poc.db.init import DEFAULT_DB_PATH
 from poc.idempotency import (
+    AMBIGUOUS,
     CONFLICT,
     IDEMPOTENCY_CONFLICT,
     IdempotencyStore,
+    IdempotencyStoreError,
+    IllegalIdempotencyTransition,
     RECONCILIATION_REQUIRED,
     RECONCILIATION_REQUIRED_ERROR,
     IN_PROGRESS,
@@ -186,28 +189,6 @@ class ToolGateway:
         )
         self.audit_store.initialize()
 
-        self._confirmed_tenant: str | None = None
-        self._confirmed_user: str | None = None
-
-    def bind_confirmed_execution(
-        self,
-        tenant_id: str,
-        user_id: str,
-        idempotency_key: str,
-        execution_id: str,
-    ) -> tuple[str, str]:
-        """Bind a completed confirmation to this gateway instance.
-
-        The POC Gateway executes one confirmed operation per bound instance.
-        This keeps the user/tenant context server-owned and prevents a later,
-        unrelated call from reusing the same execution reservation.
-        """
-        if self._confirmed_tenant is not None or self._confirmed_user is not None:
-            raise ValueError("confirmed execution already bound")
-        self._confirmed_tenant = tenant_id
-        self._confirmed_user = user_id
-        return idempotency_key, execution_id
-
     def _build_odoo_payload(self, arguments: Mapping[str, Any], idempotency_key: str) -> list[dict[str, Any]]:
         order_lines = [
             [0, 0, {"product_id": line["product_id"], "product_uom_qty": line["quantity"]}]
@@ -283,8 +264,8 @@ class ToolGateway:
             "proposal_id": None,
             "operation_hash": None,
             "approval_id": None,
-            "start_time": verification["status"],
-            "end_time": verification["reason"],
+            "start_time": _utc_now(),
+            "end_time": _utc_now(),
             "result_status": verification["status"],
             "error_code": verification["error_code"],
             "external_system": "odoo",
@@ -302,14 +283,16 @@ class ToolGateway:
         result: Mapping[str, Any] | None = None,
         structured_error: StructuredError | None = None,
         idempotency_key: str | None = None,
+        user_id: str = "",
+        tenant_id: str = "",
     ) -> GatewayResult:
         return GatewayResult(
             status=status,
             error_code=error_code,
             reason=reason,
             request_id="",
-            user_id=self._confirmed_user or "",
-            tenant_id=self._confirmed_tenant or "",
+            user_id=user_id,
+            tenant_id=tenant_id,
             tool_name="sales.order.create",
             tool_version=self.registry.get("sales.order.create")["tool_version"],
             policy_decision="confirmation_required",
@@ -327,17 +310,22 @@ class ToolGateway:
         execution_id: str,
         arguments: Mapping[str, Any],
         odoo_client: Any,
+        tenant_id: str,
+        user_id: str,
     ) -> GatewayResult:
         """Execute the confirmed mutation, verify its ERP state, then persist."""
-        record = self.idempotency_store.get(idempotency_key, self._confirmed_tenant, self._confirmed_user)
+        record = self.idempotency_store.get(idempotency_key, tenant_id, user_id)
         if record is None or record.execution_id != execution_id or record.state != "pending":
             return self._empty_result(
                 status=CONFLICT,
                 error_code=IDEMPOTENCY_CONFLICT,
                 reason="confirmed execution reservation is no longer owned",
+                user_id=user_id,
+                tenant_id=tenant_id,
             )
 
         arguments_for_audit = dict(arguments)
+        create_attempted = False
 
         try:
             product_ids = sorted({line["product_id"] for line in arguments["lines"]})
@@ -363,6 +351,7 @@ class ToolGateway:
                 )
                 payload = self._build_odoo_payload(arguments, record.idempotency_key)
                 created_ids = odoo_client.create("sale.order", payload)
+                create_attempted = True
                 if not isinstance(created_ids, list) or len(created_ids) != 1 or not isinstance(created_ids[0], int):
                     verification = self._verification_failure(
                         arguments,
@@ -415,23 +404,61 @@ class ToolGateway:
                     error_code=structured.code,
                     reason=structured.message,
                     structured_error=structured,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
                 )
             verification = self._odoo_write_failure(arguments, record, structured)
 
-        self.idempotency_store.complete(
-            record.idempotency_key,
-            request_fingerprint=record.request_fingerprint,
-            tool_name=record.tool_name,
-            tool_version=record.tool_version,
-            tenant_id=record.tenant_id,
-            user_id=record.user_id,
-            execution_id=record.execution_id,
-            result=verification["result"]
-            if verification["result"] is not None
-            else {"status": "error", "error_code": verification["error_code"]},
-            external_record_id=verification["external_record_id"],
-            reconciliation=verification["reconciliation"],
-        )
+        if verification["status"] == "error":
+            # Definitive failure. Whether the create call fired decides the
+            # retry policy: pre-create failures are safe to release for retry;
+            # post-create failures left ERP state unknown and reconcile as
+            # ambiguous instead of replaying an error as success (B4 fix).
+            if create_attempted:
+                self.idempotency_store.fail(
+                    record.idempotency_key,
+                    request_fingerprint=record.request_fingerprint,
+                    tool_name=record.tool_name,
+                    tool_version=record.tool_version,
+                    tenant_id=record.tenant_id,
+                    user_id=record.user_id,
+                    execution_id=record.execution_id,
+                    outcome=AMBIGUOUS,
+                    error_code=verification["error_code"] or "UNKNOWN_ERROR",
+                )
+            else:
+                try:
+                    self.idempotency_store.release(
+                        record.idempotency_key,
+                        tenant_id=record.tenant_id,
+                        user_id=record.user_id,
+                        execution_id=record.execution_id,
+                    )
+                except (IdempotencyStoreError, IllegalIdempotencyTransition):
+                    self.idempotency_store.fail(
+                        record.idempotency_key,
+                        request_fingerprint=record.request_fingerprint,
+                        tool_name=record.tool_name,
+                        tool_version=record.tool_version,
+                        tenant_id=record.tenant_id,
+                        user_id=record.user_id,
+                        execution_id=record.execution_id,
+                        outcome=AMBIGUOUS,
+                        error_code=verification["error_code"] or "UNKNOWN_ERROR",
+                    )
+        else:
+            self.idempotency_store.complete(
+                record.idempotency_key,
+                request_fingerprint=record.request_fingerprint,
+                tool_name=record.tool_name,
+                tool_version=record.tool_version,
+                tenant_id=record.tenant_id,
+                user_id=record.user_id,
+                execution_id=record.execution_id,
+                result=verification["result"],
+                external_record_id=verification["external_record_id"],
+                reconciliation=verification["reconciliation"],
+            )
         self.audit_store.append(
             self._verification_audit_record(record, arguments_for_audit, verification)
         )
@@ -442,6 +469,8 @@ class ToolGateway:
             result=verification["result"],
             structured_error=verification["structured_error"],
             idempotency_key=record.idempotency_key,
+            user_id=user_id,
+            tenant_id=tenant_id,
         )
 
     def confirm_and_execute(
@@ -455,17 +484,13 @@ class ToolGateway:
         approval = self.confirmation_store.approve(proposal_id, user_id, tenant_id)
         if approval.status != "approved":
             return self._approval_failure(approval)
-        self.bind_confirmed_execution(
-            tenant_id,
-            user_id,
-            approval.idempotency_key,
-            approval.execution_id,
-        )
         return self.execute_verified(
             approval.idempotency_key,
             approval.execution_id,
             approval.arguments,
             odoo_client,
+            tenant_id=tenant_id,
+            user_id=user_id,
         )
 
     def record_confirmation_denial(
@@ -474,7 +499,11 @@ class ToolGateway:
         user_id: str,
         tenant_id: str,
     ) -> GatewayResult:
-        """Deny a proposal and append the denial through the gateway audit boundary."""
+        """Deny a proposal and append the denial through the gateway audit boundary.
+
+        Denial also releases the pending idempotency reservation so the user can
+        correct the arguments and retry without manual SQLite surgery (B3 fix).
+        """
         denial = self.confirmation_store.decline(proposal_id, user_id, tenant_id)
         if denial.status != DECLINED:
             return self._approval_failure(denial)
@@ -484,8 +513,20 @@ class ToolGateway:
                 status=REPLAY,
                 error_code="CONFIRMATION_REPLAY",
                 reason="proposal_disappeared_after_denial",
+                user_id=user_id,
+                tenant_id=tenant_id,
             )
         record = self.idempotency_store.get(denial.idempotency_key, tenant_id, user_id)
+        if record is not None and record.state == "pending":
+            try:
+                self.idempotency_store.release(
+                    record.idempotency_key,
+                    tenant_id=record.tenant_id,
+                    user_id=record.user_id,
+                    execution_id=record.execution_id,
+                )
+            except (IdempotencyStoreError, IllegalIdempotencyTransition):
+                pass
         arguments_json = json.dumps(
             proposal.arguments,
             sort_keys=True,
@@ -522,11 +563,15 @@ class ToolGateway:
                 status=DENIED,
                 error_code=AUDIT_WRITE_FAILED,
                 reason="audit_write_failed",
+                user_id=user_id,
+                tenant_id=tenant_id,
             )
         result = self._empty_result(
             status=DECLINED,
             error_code=None,
             reason="confirmation_declined_by_user",
+            user_id=user_id,
+            tenant_id=tenant_id,
         )
         return _replace_audit_id(result, int(audit_record["audit_id"]))
 
@@ -813,8 +858,11 @@ class ToolGateway:
         end_time = _utc_now()
         if result.status == ACCEPTED:
             result_status = "success"
-        elif result.status in {CONFIRMATION_REQUIRED, REPLAY, IN_PROGRESS, CONFLICT, RECONCILIATION_REQUIRED}:
-            result_status = "success" if result.status == REPLAY else "pending"
+        elif result.status == REPLAY:
+            replay_is_error = isinstance(result.result, Mapping) and result.result.get("status") == "error"
+            result_status = "error" if replay_is_error else "success"
+        elif result.status in {CONFIRMATION_REQUIRED, IN_PROGRESS, CONFLICT, RECONCILIATION_REQUIRED}:
+            result_status = "pending"
         elif result.status == DENIED:
             result_status = "denied"
         else:

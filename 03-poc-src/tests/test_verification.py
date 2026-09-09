@@ -92,7 +92,6 @@ def _confirmed_execution(tmp_path: Path):
     proposal = store.create_proposal("sales.order.create", VERSION, ARGS, USER, TENANT)
     approval = store.approve(proposal.proposal.proposal_id, USER, TENANT)
     assert approval.status == "approved"
-    gateway.bind_confirmed_execution(TENANT, USER, approval.idempotency_key, approval.execution_id)
     return gateway, approval, proposal
 
 
@@ -174,7 +173,7 @@ def test_successful_write_is_verified_and_audited(tmp_path: Path):
         [_verified_record(ORDER_ID, approval.idempotency_key)],
         _line_records(),
     )
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     assert result.status == "accepted"
     assert result.error_code is None
@@ -220,7 +219,7 @@ def test_read_back_mismatch_returns_verification_failed_and_audits(tmp_path: Pat
     lines = _line_records()
     mutate(order, lines)
     client = FakeOdooClient([order], lines)
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     assert result.status == "error"
     assert result.error_code == "VERIFICATION_FAILED"
@@ -229,7 +228,9 @@ def test_read_back_mismatch_returns_verification_failed_and_audits(tmp_path: Pat
     assert structured["retryable"] is False
     assert structured["requires_user_action"] is True
     stored = gateway.idempotency_store.get(approval.idempotency_key, TENANT, USER)
-    assert stored.state == "completed"
+    # Post-create verification failures reconcile as ambiguous, never as a
+    # replayable "completed" success (false-success fix).
+    assert stored.state == "unknown"
     audit_rows = gateway.audit_store.list(request_id="verify-" + approval.execution_id)
     assert audit_rows[0]["result_status"] == "error"
     assert audit_rows[0]["error_code"] == "VERIFICATION_FAILED"
@@ -239,7 +240,7 @@ def test_read_timeout_is_retryable_erp_connection_error(tmp_path: Path):
     gateway, approval, _proposal = _confirmed_execution(tmp_path)
     client = FakeOdooClient()
     client.read_error = OdooTimeoutError("timeout", "timeout", None)
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     error = result.structured_error.to_dict()["error"]
     assert result.error_code == "ERP_CONNECTION_ERROR"
@@ -255,7 +256,7 @@ def test_read_authentication_error_requires_user_action(tmp_path: Path):
     gateway, approval, _proposal = _confirmed_execution(tmp_path)
     client = FakeOdooClient()
     client.read_error = OdooAuthenticationError("auth", "invalid key", None)
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     error = result.structured_error.to_dict()["error"]
     assert result.error_code == "ERP_CONNECTION_ERROR"
@@ -267,7 +268,7 @@ def test_create_timeout_marks_unknown_then_requires_reconciliation(tmp_path: Pat
     gateway, approval, _proposal = _confirmed_execution(tmp_path)
     client = FakeOdooClient()
     client.create_error = OdooTimeoutError("timeout", "timeout", None)
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     error = result.structured_error.to_dict()["error"]
     assert result.status == "erp_error"
@@ -304,5 +305,5 @@ def test_verifier_ignores_argument_metadata_when_verifying(tmp_path: Path):
         [_verified_record(ORDER_ID, approval.idempotency_key)],
         _line_records(),
     )
-    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, forged, client)
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, forged, client, tenant_id=TENANT, user_id=USER)
     assert result.result["verified"] is True

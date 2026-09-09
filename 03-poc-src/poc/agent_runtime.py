@@ -196,7 +196,7 @@ class AgentRuntime:
             structured = translate_odoo_exception(error)
             return AgentResult(
                 outcome="erp_error",
-                response_ar="حصلت مشكلة في الاتصال بنظام ERP. برجاء المحاولة مرة أخرى أو مراجعة المسؤول.",
+                response_ar="حصلت مشكلة غير متوقعة أثناء معالجة الطلب. برجاء المحاولة مرة أخرى أو مراجعة المسؤول.",
                 gateway_result=None,
                 tool_call=call,
                 error=structured.message,

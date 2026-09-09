@@ -45,6 +45,10 @@ class OdooValidationError(OdooClientError):
     """The request payload or values were rejected as invalid."""
 
 
+class OdooNotFoundError(OdooClientError):
+    """The requested record or endpoint does not exist."""
+
+
 class OdooServerError(OdooClientError):
     """Odoo returned an unexpected server-side failure."""
 
@@ -102,6 +106,8 @@ def _raise_for_status(status: int, body: Any) -> None:
         raise OdooAuthorizationError(name, message, status)
     if status == 422:
         raise OdooValidationError(name, message, status)
+    if status == 404:
+        raise OdooNotFoundError(name, message, status)
     raise OdooServerError(name, message, status)
 
 

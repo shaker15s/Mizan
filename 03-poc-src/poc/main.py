@@ -34,6 +34,10 @@ def _build_payload(result: AgentResult) -> dict[str, Any]:
         "error": structured_error.to_dict()["error"] if structured_error is not None else None,
         "audit_id": gateway_result.audit_id if gateway_result is not None else None,
     }
+    # A replayed result that carries a stored failure is not a success (B4 fix).
+    if success and isinstance(payload["result"], dict) and payload["result"].get("status") == "error":
+        payload["success"] = False
+        payload["error"] = {"code": payload["result"].get("error_code"), "message": "العملية السابقة فشلت؛ النتيجة معاد إرجاعها من السجل."}
     if gateway_result is not None and gateway_result.proposal is not None:
         payload["proposal"] = dict(gateway_result.proposal)
     return payload
@@ -116,9 +120,8 @@ def _run_interactive(runtime: Any, *, input_fn: Callable[[str], str] = input) ->
             return 0
         if not user_input:
             continue
-        _payload, exit_code = _run_request(runtime, user_input)
-        if exit_code != 0:
-            return exit_code
+        _payload, _exit_code = _run_request(runtime, user_input)
+        # Stay in the loop on failures; only EOF/Ctrl+C ends the session (B7 fix).
 
 
 def _parse_args(argv: list[str]) -> tuple[str | None, bool]:

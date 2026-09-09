@@ -580,6 +580,39 @@ class IdempotencyStore:
             ).fetchone()
         return None if row is None else _record_from_row(row)
 
+    def release(
+        self,
+        idempotency_key: str,
+        tenant_id: str,
+        user_id: str,
+        execution_id: str,
+    ) -> bool:
+        """Delete a pending reservation so an identical request can be retried.
+
+        Used when a confirmation is declined or expires before execution; only
+        the reservation owner may release, and only while still pending.
+        """
+        key = _key(idempotency_key)
+        tenant_id = _identifier("tenant_id", tenant_id)
+        user_id = _identifier("user_id", user_id)
+        execution_id = _execution_id(execution_id)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = connection.execute(
+                    """
+                    DELETE FROM idempotency_keys
+                    WHERE tenant_id = ? AND user_id = ? AND key = ?
+                      AND execution_id = ? AND state = ?
+                    """,
+                    (tenant_id, user_id, key, execution_id, STATE_PENDING),
+                )
+                connection.commit()
+                return cursor.rowcount == 1
+            except Exception:
+                connection.rollback()
+                raise
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path, timeout=30.0)
         connection.row_factory = sqlite3.Row

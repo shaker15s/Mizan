@@ -327,6 +327,14 @@ _ODOO_EXCEPTION_METADATA: Mapping[str, ErrorMetadata] = {
         category=CATEGORY_ERP,
         default_message="The ERP request failed.",
     ),
+    "OdooNotFoundError": ErrorMetadata(
+        code=ENTITY_NOT_FOUND,
+        retryable=False,
+        requires_user_action=True,
+        model_visible=True,
+        category=CATEGORY_ERP,
+        default_message="The referenced record does not exist.",
+    ),
 }
 
 
