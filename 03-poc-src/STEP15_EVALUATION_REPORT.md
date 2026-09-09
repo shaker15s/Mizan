@@ -246,3 +246,56 @@ Environment:
 ## 19. Next Action
 
 The POC has demonstrated that the Agent-Native ERP hypothesis holds at the deterministic server-authority level with live Odoo 19 integration. The next action is to document and present the POC results, including the architectural boundary diagram, the evaluation matrix, the adversarial test results, and the live-Odoo evidence. The POC is **NOT production-ready**; the documented production requirements in `02-poc/SECURITY_MODEL.md` remain applicable before any real deployment.
+
+---
+
+## 20. Post-Report Addendum (2026-09-10) — independent audit findings & fixes
+
+The independent audit that followed this report found that the "PROVEN FOR POC"
+verdict above was **correct for the control plane but incomplete for the
+product surface**: the four read-only tools never executed against Odoo (the
+gateway returned `accepted/ready_for_execution` without any ERP call), and
+several correctness bugs existed that the deterministic test suite did not
+cover. All findings below were verified against the code and fixed in commits
+`741da72..6944a8b`.
+
+### Findings fixed
+
+| ID | Finding | Fix |
+|---|---|---|
+| B1 | Read tools (customer.search/get, product.search, sales.order.get) returned `accepted` without executing — the NL→ERP read path was a validated no-op | `ToolGateway.handle_request` now executes read-only tools through the registry's odoo metadata after the full validate→authz pipeline; results projected to the registry output shape; audited like writes |
+| B2 | One confirmed execution per gateway *instance* — second confirmation in interactive mode failed with a misleading ERP-connection message | Instance state removed; `execute_verified` takes explicit tenant/user; gateway reusable across confirmations |
+| B3 | Pending idempotency reservation was a permanent deadlock when confirmation was declined/expired | `IdempotencyStore.release()` frees a pending reservation on decline; pre-create failures release for retry |
+| B4 | Verification/write failures were stored as `completed` and replayed as `success: true` by the CLI | Post-create failures reconcile as `ambiguous`; CLI reports replayed stored errors as failures; audit marks error replays as `error` |
+| B5 | Amount verification failed for any taxed product (exact `list_price × qty` vs `amount_total`) | Verification compares against `amount_untaxed` (taxes are Odoo-owned); falls back to `amount_total` |
+| B7 | Interactive loop exited on first failed request | Loop continues; only EOF/Ctrl+C ends the session |
+| B9 | Odoo 404 mapped to a *retryable* connection error | New `OdooNotFoundError` → `ENTITY_NOT_FOUND` (non-retryable) |
+| B11 | Audit `start_time`/`end_time` stored status/reason strings | Real timestamps |
+| B14 | Missing env vars raised raw `KeyError` | Actionable `ValueError` naming the variable |
+| — | Audit chain break: non-string scalars hashed at write but stored via TEXT affinity (int→str round-trip) made `verify_chain` fail | `_row_hash_payload` normalizes scalars; chain verified green across all paths |
+| — | Empty search results returned as `ENTITY_NOT_FOUND` errors | Searches with zero hits are a legitimate success (`count: 0`); read-by-id misses are `ENTITY_NOT_FOUND` |
+
+### New evaluation machinery (was missing entirely)
+
+- `poc/tests/run_eval.py` + `tests/test_cases.json`: the 50-case Egyptian-Arabic
+  harness TEST_PLAN §1-8 requires, driving the full chain through the proposal
+  state machine, scoring all 18 success criteria (incl. pass^3 read
+  repeatability and latency P50/P95). Deterministic run: **90/90 executions
+  pass, all criteria green**.
+- `poc/tests/verify_audit.py`: read-only chain verifier with required-field and
+  secret-leak checks (TEST_PLAN §7).
+- `scripts/bootstrap_odoo.sh`, `requirements.txt`, cwd-proof test paths.
+
+### Re-validation after fixes (2026-09-10)
+
+- Full suite with live Odoo 19 up: **311 passed, 0 failed, 0 skipped**
+  (includes 5 live JSON-2 integration tests: search, create+read-back with
+  provenance marker, readonly denial, invalid-key rejection, timeout).
+- Gateway-level live read against real Odoo: "Acme" → verified customer record,
+  audited, chain intact.
+- Live-model Arabic tool-selection evaluation (harness `--mode live`) still
+  requires `ANTHROPIC_API_KEY` and remains the open gap this POC was scoped
+  not to answer.
+
+**Amended verdict:** the read path is now real; the control-plane verdict
+stands; the remaining gap is unchanged (live Arabic model evaluation).
