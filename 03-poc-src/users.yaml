@@ -1,0 +1,30 @@
+# Server-owned POC authorization policy. NOT model-editable. NOT user-editable at runtime.
+# Mirrors 02-poc/TOOL_CONTRACTS.md (Authorization Policy) with explicit tenant binding.
+users:
+  sales_user@test:
+    tenant_id: poc_tenant_001
+    role: sales
+    allowed_tools:
+      - customer.search
+      - customer.get
+      - product.search
+      - sales.order.get
+      - sales.order.create
+    denied_tools: []
+
+  readonly_user@test:
+    tenant_id: poc_tenant_001
+    role: readonly
+    allowed_tools:
+      - customer.search
+      - customer.get
+      - product.search
+      - sales.order.get
+    denied_tools:
+      - sales.order.create
+
+  no_access_user@test:
+    tenant_id: poc_tenant_001
+    role: none
+    allowed_tools: []
+    denied_tools: []

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     reconciliation TEXT,                -- NULL | 'adopted' | 'reexecuted' | 'manual_review'
     previous_hash TEXT NOT NULL,
     own_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    created_at TEXT NOT NULL              -- application-supplied UTC timestamp (normative clock discipline)
 )
 """
 
@@ -68,11 +68,13 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     tenant_id  TEXT NOT NULL,
     user_id    TEXT NOT NULL,
     key        TEXT NOT NULL,
-    request_hash TEXT NOT NULL,   -- SHA256(tool_name + canonical args + user + tenant)
+    request_hash TEXT NOT NULL,   -- SHA256(tool binding + user + tenant + canonical args)
     execution_id TEXT NOT NULL,   -- gateway-generated UUID v4, unique per attempt
     state      TEXT NOT NULL,     -- 'pending' | 'completed' | 'unknown'
     result     TEXT,              -- JSON string of normalized tool result (when completed)
     external_record_id TEXT,      -- e.g. sale.order id/name, when known
+    tool_name TEXT NOT NULL,
+    tool_version TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (tenant_id, user_id, key)
@@ -142,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     report = initialize(db_path)
     print(f"gateway store : {report['db_path']}")
     print(f"journal_mode  : {report['journal_mode']}")
-    print(f"created tables: {', '.join(report['created_tables']) or '(none — already present)'}")
+    print(f"created tables: {', '.join(report['created_tables']) or '(none - already present)'}")
     print(f"existing      : {', '.join(report['preexisting_tables']) or '(none)'}")
     counts = ", ".join(f"{t}={n}" for t, n in report["row_counts"].items())
     print(f"row counts    : {counts}")

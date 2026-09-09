@@ -1,6 +1,6 @@
 # Agent-Native ERP — POC Security Model
 
-**Date:** 7 September 2026 (revised after audit against `00-research/` — authoritative; changes: SQLite (WAL mode) gateway store, content-addressable idempotency keys, `tool_version` in `operation_hash`, third test user)
+**Date:** 7 September 2026 (review follow-up: audit hash-input canonicalization + clock discipline + sanitize allowlist pinned in §8/§9; `created_at` now application-supplied; SQLite (WAL) store per locked POC scope per ADR-03; content-addressable idempotency keys; `tool_version` bound into `operation_hash`; re-authorization checklist; third test user)
 **Status:** Design only. No code.
 
 ---
@@ -247,11 +247,15 @@ CREATE TABLE audit_log (
     reconciliation TEXT,                -- NULL | 'adopted' | 'reexecuted' | 'manual_review'
     previous_hash TEXT NOT NULL,
     own_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    created_at TEXT NOT NULL             -- application-supplied UTC timestamp (see clock discipline below); NO DB default, because this column is part of the hash input and must be known before hashing
 );
 ```
 
 **Storage (POC: SQLite WAL mode, file `data/poc_gateway.db`):** the audit table lives in the same SQLite file as `idempotency_keys` and `proposals`. Append-only enforcement on `audit_log` is code-discipline-enforced in the POC (`audit.py` exposes no UPDATE/DELETE methods). The hash-chain verifier (`verify_audit`) opens the file read-only. Production migrates to a database-enforced role. **Production:** a separate audit store or WORM enforcement for stronger tamper resistance (research C10).
+
+**Clock discipline (normative):** every timestamp column in the gateway store (`created_at`, `start_time`, `end_time`, `expires_at`, `confirmed_at`, `executed_at`, `updated_at`) is written by the application as **UTC ISO-8601 with `Z` suffix and second precision** (`datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')`). No SQLite `DEFAULT`/`strftime('now')` values are used for any hashed or expiry-compared column. All expiry comparisons are performed by the gateway in Python against these parsed values, never by DB-side clock functions.
+
+**Sanitized-arguments allowlist (normative):** `sanitized_arguments` may contain ONLY: for reads — `query` (string), `customer_id`, `order_id`, `limit`; for writes — `customer_id`, `lines[].product_id`, `lines[].quantity`. No free-text names, notes, phone numbers, emails, or any field not explicitly in this list. Anything outside → store `arguments_hash` only.
 
 `tool_version` in the audit record is the semantic version string (e.g. `"1.0.0"`) that was active at the time of the call — it matches the `tool_version` bound into the proposal's `operation_hash`.
 
@@ -265,27 +269,30 @@ CREATE TABLE audit_log (
 
 ## 9. Audit Hash Chain
 
-Each audit row's hash is computed from its own content plus the previous row's hash:
+Each audit row's hash is computed from its own stored content plus the previous row's hash.
+
+**Hash input (normative):** the payload is the canonical JSON object of **every column in the stored row EXCEPT `audit_id`, `previous_hash`, and `own_hash`**. `audit_id` is excluded because it is DB-assigned at insert time and unknown at hashing time; chain position/order is still covered because the verifier walks rows in `ORDER BY audit_id` and each row embeds the predecessor's `own_hash` (a removed, inserted, or reordered row breaks a `previous_hash` link). Values are serialized exactly as stored: TEXT as JSON string, INTEGER as JSON number, NULL as `null`. Serialization uses the same canonical rules as `operation_hash` (§6): UTF-8, `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False`.
 
 ```python
-def compute_row_hash(row_data: dict, previous_hash: str) -> str:
-    payload = json.dumps(row_data, sort_keys=True)
-    combined = previous_hash + payload
-    return hashlib.sha256(combined.encode()).hexdigest()
+GENESIS = "0" * 64  # fixed previous_hash for the first row
+
+def compute_row_hash(stored_row_without_audit_id_prevhash_ownhash: dict, previous_hash: str) -> str:
+    payload = json.dumps(stored_row_without_audit_id_prevhash_ownhash, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256((previous_hash + payload).encode("utf-8")).hexdigest()
 ```
 
-**Write flow:**
-1. Read the last row's `own_hash` (or `"genesis"` if table is empty)
-2. Compute `own_hash` for the new row
-3. Insert with `previous_hash` and `own_hash`
+**Write flow (single writer — the gateway process, serialized by its own lock + `BEGIN IMMEDIATE`):**
+1. Read the last row's `own_hash` (or `GENESIS` if the table is empty)
+2. Build the full row dict (all columns incl. app-supplied `created_at`; excluding the three hash inputs above)
+3. Compute `own_hash` from that dict + `previous_hash`; insert the row with all three columns
 
 **Verification flow:**
 ```python
 def verify_chain() -> bool:
     rows = SELECT * FROM audit_log ORDER BY audit_id
-    previous_hash = "genesis"
+    previous_hash = GENESIS
     for row in rows:
-        expected = compute_row_hash(row.data, previous_hash)
+        expected = compute_row_hash(row.payload_columns(), previous_hash)
         if row.own_hash != expected:
             return False  # tampered
         if row.previous_hash != previous_hash:

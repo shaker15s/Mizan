@@ -415,10 +415,18 @@ Timestamps are recorded at each boundary. The test harness reports P50/P95 per c
 docker compose up -d
 
 # 2. Wait for Odoo readiness: http://localhost:8069  (first boot takes 1–3 min)
-# 3. Create the Odoo test database `poc_test` (demo data ON) via the Odoo database manager
-# 4. Initialize the gateway store schema (SQLite WAL file, created automatically on first run):
+# 3. Create the Odoo test database `poc_test` — deterministic CLI path (Odoo 19):
+#      docker compose exec -T odoo odoo -d poc_test --db_host db --db_user odoo \
+#        --db_password odoo -i sale_management,stock --stop-after-init
+#      docker compose exec -T odoo odoo module force-demo -d poc_test
+#    NOTE (Odoo 19 behavior change): CLI-created DBs ship WITHOUT demo data;
+#    `module force-demo` is the official installer for demo data.
+#    NOTE: run setup commands with `--max-cron-threads=0` where possible —
+#    demo loading can fire outbound IAP/SMS cron side effects (verified).
+#    The gateway store schema roles note is obsolete — SQLite has no roles;
+#    see SECURITY_MODEL.md §8 for the app-supplied-timestamp + hash-input rules.
+# 4. Initialize the gateway store schema (SQLite WAL file, idempotent):
 python -m poc.db.init   # creates data/poc_gateway.db with WAL mode and all tables
-#    (schema + roles are idempotent; see SECURITY_MODEL.md §8 for the audit INSERT-only role)
 
 # 5. Create Odoo users + API keys (per verified Odoo docs, master):
 #    - Log in as each user → Preferences (top-right avatar) → Account Security → New API Key
