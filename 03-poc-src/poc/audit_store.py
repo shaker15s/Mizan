@@ -132,7 +132,14 @@ def _sanitize_arguments(arguments: Mapping[str, Any] | None) -> dict[str, Any] |
 
 
 def _row_hash_payload(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: row[key] for key in AUDIT_COLUMNS if key not in {"audit_id", "previous_hash", "own_hash"}}
+    return {
+        # str() normalizes any int/float the caller passed so the recomputed
+        # hash always matches the TEXT-affinity value SQLite stores back.
+        key: str(value) if value is not None and not isinstance(value, (str, dict, list)) else value
+        for key, value in (
+            (key, row[key]) for key in AUDIT_COLUMNS if key not in {"audit_id", "previous_hash", "own_hash"}
+        )
+    }
 
 
 def compute_row_hash(payload_columns: Mapping[str, Any], previous_hash: str) -> str:

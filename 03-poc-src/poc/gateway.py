@@ -291,6 +291,7 @@ class ToolGateway:
         idempotency_key: str | None = None,
         user_id: str = "",
         tenant_id: str = "",
+        execution_id: str | None = None,
     ) -> GatewayResult:
         return GatewayResult(
             status=status,
@@ -303,7 +304,7 @@ class ToolGateway:
             tool_version=self.registry.get("sales.order.create")["tool_version"],
             policy_decision="confirmation_required",
             idempotency_key=idempotency_key,
-            execution_id=None,
+            execution_id=execution_id,
             result=result,
             audit_id=None,
             requires_confirmation=False,
@@ -477,6 +478,7 @@ class ToolGateway:
             idempotency_key=record.idempotency_key,
             user_id=user_id,
             tenant_id=tenant_id,
+            execution_id=record.execution_id,
         )
 
     def confirm_and_execute(
@@ -735,12 +737,22 @@ class ToolGateway:
             )
 
         if not records:
+            if odoo["method"] == "read":
+                # Read-by-id returning nothing means the referenced record does
+                # not exist; a search with zero hits is a legitimate success.
+                return self._final_result(
+                    context,
+                    status="erp_error",
+                    error_code=ENTITY_NOT_FOUND,
+                    reason="no_matching_records",
+                    structured_error=translate_error(ENTITY_NOT_FOUND, "No matching records were found."),
+                )
             return self._final_result(
                 context,
-                status="erp_error",
-                error_code=ENTITY_NOT_FOUND,
-                reason="no_matching_records",
-                structured_error=translate_error(ENTITY_NOT_FOUND, "No matching records were found."),
+                status=ACCEPTED,
+                error_code=None,
+                reason="read_completed",
+                result=_shape_read_result(record.tool_name, []),
             )
         return self._final_result(
             context,
