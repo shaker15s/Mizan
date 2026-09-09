@@ -351,7 +351,7 @@ def test_gateway_has_no_arbitrary_odoo_execution_surface():
 
 
 def test_gateway_source_has_no_llm_or_odoo_execution_imports():
-    source = Path("poc/gateway.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[1].joinpath("poc", "gateway.py").read_text(encoding="utf-8")
     forbidden = (
         "import odoo",
         "from odoo",

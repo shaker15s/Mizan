@@ -228,7 +228,7 @@ def test_unknown_odoo_exception_is_conservative() -> None:
 
 
 def test_errors_module_is_a_translation_boundary() -> None:
-    source = Path("poc/errors.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[1].joinpath("poc", "errors.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     imported_modules: set[str] = set()
     for node in ast.walk(tree):
@@ -243,7 +243,7 @@ def test_errors_module_is_a_translation_boundary() -> None:
 def test_deferred_codes_are_metadata_only() -> None:
     deferred = {ENTITY_NOT_FOUND, VERIFICATION_FAILED, MAX_TOOL_CALLS_EXCEEDED, BUSINESS_RULE_VIOLATED}
     assert deferred <= set(CANONICAL_TAXONOMY)
-    source = Path("poc/errors.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[1].joinpath("poc", "errors.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     functions = [node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
     assert not any(function and any(code.lower() in function.lower() for code in deferred) for function in functions)

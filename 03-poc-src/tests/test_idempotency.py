@@ -381,7 +381,7 @@ def test_existing_database_data_remains_intact(tmp_path: Path):
 def test_source_has_no_odoo_or_llm_dependencies():
     from pathlib import Path
 
-    source = Path("poc/idempotency.py").read_text(encoding="utf-8")
+    source = Path(__file__).resolve().parents[1].joinpath("poc", "idempotency.py").read_text(encoding="utf-8")
     forbidden = (
         "import odoo",
         "from odoo",

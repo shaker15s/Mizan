@@ -216,7 +216,7 @@ def test_cli_input_cannot_override_identity_or_tenant(tmp_path: Path):
 
 def test_main_does_not_import_odoo_client_or_audit_directly(tmp_path: Path):
     from pathlib import Path as PathType
-    source = PathType("poc/main.py").read_text(encoding="utf-8")
+    source = PathType(__file__).resolve().parents[1].joinpath("poc", "main.py").read_text(encoding="utf-8")
     assert "poc.odoo_client" not in source
     assert "AuditStore" not in source
     assert "OdooJSON2Client" not in source

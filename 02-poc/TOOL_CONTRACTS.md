@@ -195,11 +195,6 @@ Every tool is defined as a JSON file. The schema follows the MCP tool definition
     "model": "product.product",
     "method": "search_read",
     "domain_template": "[[\"name\", \"ilike\", \"{query}\"]]",
-    "fields": ["id", "name", "list_price", "qty_available"]
-  "odoo": {
-    "model": "product.product",
-    "method": "search_read",
-    "domain_template": "[[\"name\", \"ilike\", \"{query}\"]]",
     "fields": ["id", "name", "list_price", "qty_available"],
     "limit_cap": 20
   }
