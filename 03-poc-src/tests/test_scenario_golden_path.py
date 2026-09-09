@@ -35,10 +35,25 @@ class FakeOdooClient:
 
     def __init__(self) -> None:
         self.products: dict[int, dict[str, Any]] = {7: {"id": 7, "list_price": 50.0}}
+        self.partners: dict[int, dict[str, Any]] = {42: {"id": 42, "name": "Test Partner", "email": None, "phone": None}}
         self.orders: dict[int, dict[str, Any]] = {}
         self.order_lines: dict[int, dict[str, Any]] = {}
         self.create_calls: list[tuple[str, list[dict[str, Any]]]] = []
         self._next_id = 100
+
+    def search_read(self, model: str, domain: list[Any], fields: list[str], limit: int | None = None) -> list[dict[str, Any]]:
+        query = next(
+            (triplet[2] for triplet in domain if isinstance(triplet, (list, tuple)) and len(triplet) == 3 and triplet[0] == "name"),
+            "",
+        )
+        if model == "res.partner":
+            source = self.partners
+        elif model == "product.product":
+            source = self.products
+        else:
+            return []
+        matches = [dict(record) for record in source.values() if query.lower() in str(record.get("name", "")).lower()]
+        return matches[:limit] if limit else matches
 
     def read(self, model: str, ids: list[int], fields: list[str]) -> list[dict[str, Any]]:
         if model == "product.product":

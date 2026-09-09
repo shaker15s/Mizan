@@ -67,6 +67,32 @@ class AgentRuntimeError(RuntimeError):
     """Raised when Agent Runtime cannot produce a valid gateway request."""
 
 
+def _read_result_summary(result: Mapping[str, Any]) -> str:
+    """Human-readable Arabic summary for executed read results; '' otherwise."""
+    if not isinstance(result, dict) or not result.get("success"):
+        return ""
+    customers = result.get("customers")
+    if isinstance(customers, list):
+        if not customers:
+            return "مفيش عملاء مطابقين للبحث."
+        names = "، ".join(str(entry.get("name", "?")) for entry in customers[:5])
+        more = f" (و{len(customers) - 5} كمان)" if len(customers) > 5 else ""
+        return f"لقيت {len(customers)} عميل: {names}{more}"
+    products = result.get("products")
+    if isinstance(products, list):
+        if not products:
+            return "مفيش منتجات مطابقة للبحث."
+        rows = "، ".join(f"{entry.get('name', '?')}" for entry in products[:5])
+        return f"لقيت {len(products)} منتج: {rows}"
+    customer = result.get("customer")
+    if isinstance(customer, dict):
+        return f"بيانات العميل: {customer.get('name', '?')}"
+    order = result.get("order")
+    if isinstance(order, dict):
+        return f"الأوردر {order.get('name', '?')} حالة {order.get('state', '?')} بإجمالي {order.get('amount_total', '?')}"
+    return ""
+
+
 @dataclass(frozen=True)
 class AgentResult:
     """Truthful result passed back to the caller."""
@@ -190,14 +216,22 @@ class AgentRuntime:
             arguments=dict(call.arguments),
             idempotency_key=None,
         )
+        gateway_result: GatewayResult | None = None
         try:
-            gateway_result = self.gateway.handle_request(gateway_request)
+            contract = self.registry.get(call.name)
+            odoo_client = None
+            if contract["readOnly"] and self.odoo_client_factory is not None:
+                odoo_client = self.odoo_client_factory(self.user_id or "", self.tenant_id or "")
+            if odoo_client is not None:
+                gateway_result = self.gateway.handle_request(gateway_request, odoo_client=odoo_client)
+            else:
+                gateway_result = self.gateway.handle_request(gateway_request)
         except Exception as error:
             structured = translate_odoo_exception(error)
             return AgentResult(
                 outcome="erp_error",
                 response_ar="حصلت مشكلة غير متوقعة أثناء معالجة الطلب. برجاء المحاولة مرة أخرى أو مراجعة المسؤول.",
-                gateway_result=None,
+                gateway_result=gateway_result,
                 tool_call=call,
                 error=structured.message,
                 structured_error_data=structured,
@@ -261,7 +295,7 @@ class AgentRuntime:
         detail = ""
         if result.status == ACCEPTED:
             if result.result:
-                detail = json.dumps(result.result, ensure_ascii=False, default=str)
+                detail = _read_result_summary(result.result) or json.dumps(result.result, ensure_ascii=False, default=str)
             else:
                 detail = "استعلام جاهز للتنفيذ"
         elif result.status == CONFIRMATION_REQUIRED:

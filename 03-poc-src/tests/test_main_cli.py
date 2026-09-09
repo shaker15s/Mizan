@@ -29,6 +29,16 @@ class FakeOdooClient:
         self.orders = orders or []
         self.created = 0
 
+    def search_read(self, model: str, domain: list[Any], fields: list[str], limit: int | None = None) -> list[dict[str, Any]]:
+        query = next(
+            (triplet[2] for triplet in domain if isinstance(triplet, (list, tuple)) and len(triplet) == 3 and triplet[0] == "name"),
+            "",
+        )
+        if model == "res.partner":
+            # Deterministic fixture: any partner search yields the seeded record.
+            return [{"id": 42, "name": "Test Customer", "email": None, "phone": None}]
+        return []
+
     def read(self, model: str, ids: list[int], fields: list[str]) -> list[dict[str, Any]]:
         if model == "product.product":
             return [{"id": 7, "list_price": 100.0}] if 7 in ids else []

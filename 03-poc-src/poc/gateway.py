@@ -46,7 +46,12 @@ from poc.idempotency import (
     compute_request_fingerprint,
 )
 from poc.tool_contracts import ToolRegistry, get_registry
-from poc.errors import StructuredError, translate_error, translate_odoo_exception
+from poc.errors import (
+    ENTITY_NOT_FOUND,
+    StructuredError,
+    translate_error,
+    translate_odoo_exception,
+)
 from poc.verification import verify_sales_order_creation
 
 ACCEPTED = "accepted"
@@ -164,6 +169,7 @@ class _Context:
     replay_result: Mapping[str, Any] | None = None
     error_code: str | None = None
     requires_confirmation: bool = False
+    odoo_client: Any = None
 
 
 class ToolGateway:
@@ -593,8 +599,9 @@ class ToolGateway:
     def handle_request(
         self,
         request: ToolGatewayRequest | Mapping[str, Any],
+        odoo_client: Any = None,
     ) -> GatewayResult:
-        """Process one structured request without executing ERP operations."""
+        """Process one structured request; executes read-only tools when a client is provided."""
         try:
             if isinstance(request, ToolGatewayRequest):
                 record = request
@@ -603,7 +610,7 @@ class ToolGateway:
         except InvalidGatewayRequest:
             return self._audit_invalid_envelope()
 
-        context = _Context(record=record, tool_call_id=str(uuid.uuid4()))
+        context = _Context(record=record, tool_call_id=str(uuid.uuid4()), odoo_client=odoo_client)
         result = self._process(context)
         audit_id = self._audit(context, result)
         if audit_id is None:
@@ -684,11 +691,63 @@ class ToolGateway:
         if contract["readOnly"] is False:
             return self._process_mutating(context, contract, policy_decision)
 
+        if context.odoo_client is not None:
+            return self._execute_read(context, contract)
+
         return self._final_result(
             context,
             status=ACCEPTED,
             error_code=None,
             reason="ready_for_execution",
+        )
+
+    def _execute_read(self, context: _Context, contract: Mapping[str, Any]) -> GatewayResult:
+        """Execute one read-only tool call through the provided ERP client.
+
+        The client is supplied by the caller inside the server-owned boundary;
+        the gateway still owns validation, authorization, and audit for the read.
+        """
+        record = context.record
+        odoo = contract["odoo"]
+        model = odoo["model"]
+        fields = list(odoo["fields"])
+        limit_cap = odoo.get("limit_cap")
+        try:
+            if odoo["method"] == "search_read":
+                query = str(context.record.arguments["query"])
+                domain = [["name", "ilike", query]]
+                limit = int(limit_cap) if limit_cap else None
+                records = odoo_client_search_read(context.odoo_client, model, domain, fields, limit)
+            elif odoo["method"] == "read":
+                id_field = "customer_id" if "customer_id" in context.record.arguments else "order_id"
+                record_id = int(context.record.arguments[id_field])
+                records = context.odoo_client.read(model, [record_id], fields)
+            else:
+                raise ValueError(f"tool read method {odoo['method']!r} is not executable")
+        except Exception as error:
+            structured = translate_odoo_exception(error)
+            return self._final_result(
+                context,
+                status="erp_error",
+                error_code=structured.code,
+                reason=structured.message,
+                structured_error=structured,
+            )
+
+        if not records:
+            return self._final_result(
+                context,
+                status="erp_error",
+                error_code=ENTITY_NOT_FOUND,
+                reason="no_matching_records",
+                structured_error=translate_error(ENTITY_NOT_FOUND, "No matching records were found."),
+            )
+        return self._final_result(
+            context,
+            status=ACCEPTED,
+            error_code=None,
+            reason="read_completed",
+            result=_shape_read_result(record.tool_name, records),
         )
 
     def _validate_envelope(self, context: _Context) -> None:
@@ -809,6 +868,7 @@ class ToolGateway:
         reason: str,
         result: Mapping[str, Any] | None = None,
         proposal: Mapping[str, Any] | None = None,
+        structured_error: StructuredError | None = None,
     ) -> GatewayResult:
         return GatewayResult(
             status=status,
@@ -826,6 +886,7 @@ class ToolGateway:
             audit_id=None,
             requires_confirmation=context.requires_confirmation,
             proposal=proposal,
+            structured_error_override=structured_error,
         )
 
     def _confirmation_proposal(self, context: _Context) -> Mapping[str, Any] | None:
@@ -965,4 +1026,63 @@ def _empty_invalid_result(audit_id: int | None = None) -> GatewayResult:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def odoo_client_search_read(client: Any, model: str, domain: list[Any], fields: list[str], limit: int | None) -> list[dict[str, Any]]:
+    """Indirect search_read call so tests can stub without importing the client."""
+    return client.search_read(model, domain, fields, limit)
+
+
+def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """Project raw Odoo records into the tool output shape defined by the registry."""
+    if tool_name == "customer.search":
+        customers = [
+            {
+                "id": record.get("id"),
+                "name": record.get("name"),
+                "email": record.get("email"),
+                "phone": record.get("phone"),
+            }
+            for record in records
+        ]
+        return {"success": True, "customers": customers, "count": len(customers)}
+    if tool_name == "customer.get":
+        record = records[0]
+        customer = {
+            "id": record.get("id"),
+            "name": record.get("name"),
+            "email": record.get("email"),
+            "phone": record.get("phone"),
+            "street": record.get("street"),
+        }
+        return {"success": True, "customer": customer}
+    if tool_name == "product.search":
+        products = [
+            {
+                "id": record.get("id"),
+                "name": record.get("name"),
+                "list_price": record.get("list_price"),
+                "qty_available": record.get("qty_available"),
+            }
+            for record in records
+        ]
+        return {"success": True, "products": products, "count": len(products)}
+    if tool_name == "sales.order.get":
+        record = records[0]
+        partner = record.get("partner_id")
+        if isinstance(partner, (list, tuple)):
+            partner_id = partner[0] if partner else None
+            partner_name = partner[1] if len(partner) > 1 else None
+        else:
+            partner_id, partner_name = partner, None
+        order = {
+            "id": record.get("id"),
+            "name": record.get("name"),
+            "partner_id": partner_id,
+            "partner_name": partner_name,
+            "state": record.get("state"),
+            "amount_total": record.get("amount_total"),
+        }
+        return {"success": True, "order": order}
+    return {"success": True, "records": list(records)}
 
