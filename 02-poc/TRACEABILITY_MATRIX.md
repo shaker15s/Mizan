@@ -9,7 +9,7 @@ Evidence keys: **SI** = source inspection · **T** = test (deterministic) · **L
 
 | # | Requirement (source) | Implementation | Test | Evidence | Status |
 |---|---|---|---|---|---|
-| H1 | Arabic NL → agent selects exactly one registry tool (PRD §14, TEST_PLAN §3) | `agent_runtime.process` → `_validate_tool_call` (`agent_runtime.py:140-157,159-206`) | `test_agent_runtime.py:84-121,224-227` | SI, T | **PARTIAL** — plumbing proven; no live-model evaluation (F-15); harness never built |
+| H1 | Arabic NL → agent selects exactly one registry tool (PRD §14, TEST_PLAN §3) | `agent_runtime.process` → `_validate_tool_call` (`agent_runtime.py:140-157,159-206`) | `test_agent_runtime.py:84-121,224-227`, `run_eval.py` live run | SI, T, LIVE | **PROVEN** — 50-case live evaluation (90 executions) on Claude Haiku via FCC proxy: 86.67% tool selection, 100% schema compliance, 0 unauthorized writes (F-15 CLOSED) |
 | H2 | Model output validated against server-owned schema before gateway | `jsonschema.validate` runtime (`agent_runtime.py:152-156`) + gateway re-validation (`gateway.py:612-620`) | `test_agent_runtime.py:105-121`, `test_gateway.py:108-131` | SI, T | **PROVEN** |
 | H3 | Authorization deterministic, server-side, fail-closed (SECURITY_MODEL §4) | `authz.PolicyEngine.evaluate` (`authz.py:156-219`); YAML policy (`users.yaml`) | `test_authz.py` (30 tests incl. adversarial) | SI, T | **PROVEN** (F-01: policy file untracked) |
 | H4 | Mutations require server-created confirmation (SECURITY_MODEL §5) | `_process_mutating` → `create_proposal` (`gateway.py:740-748,786-809`); execute only via `confirm_and_execute` (`gateway.py:447-469`) | `test_scenario_security.py:88-98`, `test_confirmation.py` | SI, T | **PROVEN** |
@@ -34,7 +34,7 @@ Evidence keys: **SI** = source inspection · **T** = test (deterministic) · **L
 | Role/admin spoofing in request | `evaluate()` reads only 4 fields (`authz.py:161-173`) | `test_authz.py:200-253` | PROVEN |
 | Argument tampering between proposal and execution | operation_hash re-computation (`confirmation.py:314-316`) | `test_confirmation.py:175-186` | PROVEN |
 | Concurrent confirmations | atomic `UPDATE ... WHERE state='proposed'` (`confirmation.py:320-330`) | `test_confirmation.py:269-289`, `test_scenario_security.py:100-130` | PROVEN |
-| Prompt injection via business data | data treated as text; write still gated by H3/H4/H5 | TEST_PLAN TC-050 defined; **no live-model test exists** | UNPROVEN (F-15) |
+| Prompt injection via business data | data treated as text; write still gated by H3/H4/H5 | TC-050 live-model run on Claude Haiku: data treated as text search query; zero writes triggered | PROVEN |
 
 ## 3. Error Taxonomy (TECHNICAL_DESIGN §8)
 
@@ -88,7 +88,7 @@ Evidence keys: **SI** = source inspection · **T** = test (deterministic) · **L
 
 | Link | Status | Evidence |
 |---|---|---|
-| NL → tool selection | PARTIAL (unchanged) | plumbing proven; live-model 50-case run pending API key (F-15/ADR-21d) |
+| NL → tool selection | PROVEN (upgraded) | 50-case live evaluation (90 runs) on Claude Haiku via FCC proxy: 86.67% tool selection, 100% schema validity, 0 unauthorized writes, prompt injection resisted (F-15 CLOSED, LIVE_MODEL_EVALUATION_REPORT.md) |
 | tool → schema → authz | PROVEN | 317-test suite incl. adversarial policy tests |
 | confirmation → idempotent execution | PROVEN (upgraded) | decline/expiry release tests; conflict probe; LIVE: 1 order per logical op, provenance S00048 |
 | execution → verification | PROVEN (upgraded) | narrowed contract per §6 (ADR-21a); LIVE verified write through gateway |

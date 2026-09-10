@@ -536,6 +536,10 @@ def run_eval(
 
 
 def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     from dotenv import load_dotenv
 
     load_dotenv(SRC_ROOT / ".env")
