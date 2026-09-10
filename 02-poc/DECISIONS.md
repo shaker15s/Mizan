@@ -472,3 +472,47 @@ The exact ordered implementation sequence (15 steps, each independently testable
 13. Test harness
 14. 50-test dataset
 15. Evaluation run and report
+
+---
+
+## ADR-21 · Reconciliation addendum (2026-09-10, post-audit hardening)
+
+- **ADR-21a (F-06 resolution — Outcome B):** Financial verification is
+  narrowed to TECHNICAL_DESIGN §6 exactly: `amount_total`/`amount_untaxed`
+  present and non-negative; totals are Odoo-computed and are NOT reproduced
+  locally. Strict verification remains for identity, state=draft,
+  provenance (`client_order_ref`), per-line product, and per-line quantity.
+  Product existence is now a pre-create gateway check that raises
+  `ENTITY_NOT_FOUND` and releases the reservation (nothing committed).
+  Regression: `test_unit_verifier_rejects_negative_total`, `missing_amount`
+  parametrize case, `test_nonexistent_product_fails_pre_create_as_entity_not_found`,
+  live gateway write (order S00048 verified).
+- **ADR-21b (pre/post-create failure split):** Failures are classified by
+  ERP-commit uncertainty. Not-committed (pricing read failure, Odoo 422
+  validation rejection, product nonexistent) → reservation RELEASED, retry
+  allowed. Commit-uncertain (timeout during create, post-create read-back
+  failure/mismatch, malformed create response) → reservation stays
+  `unknown`/`AMBIGUOUS_OUTCOME`, never re-executes, created order id is
+  preserved as `external_record_id` (F-07). Regression:
+  `test_pre_create_pricing_failure_releases_reservation`,
+  `test_odoo_validation_rejection_releases_reservation`,
+  `test_create_timeout_stays_ambiguous_never_releases`.
+- **ADR-21c (F-10, F-11, F-13, F-18 classified as POC LIMITATION):** No
+  automated reconciliation service (manual adoption via
+  `IdempotencyStore.complete(ADOPTED)` + provenance key remains possible);
+  `MAX_LINE_QUANTITY`/`MAX_ORDER_AMOUNT` caps deferred — Odoo validation is
+  the documented backstop; proposal lifecycle terminates at `confirmed`
+  (replay protection is state-independent of it); per-boundary latency lives
+  in the eval harness, not in audit rows.
+- **ADR-21d (evaluation honesty, F-15):** Deterministic-mode model metrics
+  (tool selection, parameter accuracy, schema validity, compound rates,
+  pass^3) are reported as `null`/N-A — the FakeLLM is scripted with expected
+  outputs, so they would be circular. Deterministic mode measures the control
+  plane (unauthorized writes, duplicates, idempotency conflict, audit
+  coverage, chain integrity, injection resistance at control level,
+  latency). Live-model metrics require `--mode live` + `ANTHROPIC_API_KEY`.
+- **ADR-21e (F-09/F-12/F-14/F-17):** Decline and expired approval release the
+  pending reservation; interactive mode reusable (per-call identity);
+  proposal-path audit rows carry `proposal_id`/`operation_hash`; unknown
+  internal error codes keep the conservative fallback (accepted risk,
+  never unsafe).

@@ -9,7 +9,7 @@ from poc.db.init import initialize
 from poc.gateway import ToolGateway
 from poc.confirmation import ConfirmationStore
 from poc.errors import translate_odoo_exception
-from poc.odoo_client import OdooNotFoundError, OdooServerError
+from poc.odoo_client import OdooNotFoundError, OdooServerError, OdooTimeoutError, OdooValidationError
 
 TENANT = "poc_tenant_001"
 USER = "sales_user@test"
@@ -135,7 +135,52 @@ def test_pre_create_pricing_failure_releases_reservation(tmp_path: Path):
     assert result.status in {"erp_error", "error"}
     assert client.create_calls == 0, "no create may fire when pricing fails"
     stored = gateway.idempotency_store.get(approval.idempotency_key, TENANT, USER)
-    assert stored is None or stored.state in {"unknown", "completed"}, "reservation must not deadlock retries"
+    assert stored is None, "pre-create failure must release the reservation for retry (reconciliation fix)"
+
+
+def test_nonexistent_product_fails_pre_create_as_entity_not_found(tmp_path: Path):
+    """F-06/F-11: a nonexistent product is rejected BEFORE any mutation with
+    ENTITY_NOT_FOUND, and the reservation is released for a corrected retry."""
+    gateway, approval = _confirmed(tmp_path)
+    bad_args = {"customer_id": 42, "lines": [{"product_id": 99999, "quantity": 2}]}
+    client = FakeOdooClient()
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, bad_args, client, tenant_id=TENANT, user_id=USER)
+    assert result.status == "error"
+    assert result.error_code == "ENTITY_NOT_FOUND"
+    assert client.create_calls == 0, "no mutation may occur for a nonexistent product"
+    stored = gateway.idempotency_store.get(approval.idempotency_key, TENANT, USER)
+    assert stored is None, "rejected-before-create must release for retry"
+
+
+def test_odoo_validation_rejection_releases_reservation(tmp_path: Path):
+    """A 422 from Odoo means nothing was committed: the key must free up."""
+
+    class ValidationReject(FakeOdooClient):
+        def create(self, model, vals_list):
+            raise OdooValidationError("validation", "bad partner", 422)
+
+    gateway, approval = _confirmed(tmp_path)
+    client = ValidationReject()
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
+    assert result.status in {"erp_error", "error"}
+    stored = gateway.idempotency_store.get(approval.idempotency_key, TENANT, USER)
+    assert stored is None, "validation-rejected create must not poison the idempotency key"
+
+
+def test_create_timeout_stays_ambiguous_never_releases(tmp_path: Path):
+    """A timeout DURING create may have committed: the key stays unknown and
+    retries reconcile instead of risking a duplicate order."""
+
+    class TimeoutCreate(FakeOdooClient):
+        def create(self, model, vals_list):
+            raise OdooTimeoutError("timeout", "connection timed out")
+
+    gateway, approval = _confirmed(tmp_path)
+    client = TimeoutCreate()
+    result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
+    assert result.status == "erp_error"
+    stored = gateway.idempotency_store.get(approval.idempotency_key, TENANT, USER)
+    assert stored is not None and stored.state == "unknown", "ambiguous outcome must be preserved for reconciliation"
 
 
 def test_404_maps_to_entity_not_found():

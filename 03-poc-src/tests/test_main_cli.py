@@ -56,6 +56,7 @@ class FakeOdooClient:
             "partner_id": (42, "Test Customer"),
             "state": "draft",
             "amount_total": 200.0,
+            "amount_untaxed": 200.0,
             "order_line": [11],
             "client_order_ref": vals_list[0].get("client_order_ref"),
         })

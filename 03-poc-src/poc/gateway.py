@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import hashlib
 import uuid
-from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,11 +20,12 @@ from typing import Any, Mapping
 import jsonschema
 
 from poc.audit_store import AuditStore
-from poc.authz import PolicyEngine
+from poc.authz import ALLOWED, PolicyEngine
 from poc.confirmation import (
     ApprovalResult,
     ConfirmationStore,
     DECLINED,
+    EXPIRED,
     NOT_FOUND,
     REPLAY,
 )
@@ -218,12 +218,20 @@ class ToolGateway:
         }
         return self._verification_outcome("accepted", None, "verified_sales_order_created", result, str(order_id))
 
-    def _verification_failure(self, arguments: Mapping[str, Any], record: Any, reason: str) -> Any:
+    def _verification_failure(
+        self,
+        arguments: Mapping[str, Any],
+        record: Any,
+        reason: str,
+        external_record_id: str | None = None,
+        error_code: str = "VERIFICATION_FAILED",
+    ) -> Any:
         return self._verification_outcome(
             "error",
-            "VERIFICATION_FAILED",
+            error_code,
             reason,
             None,
+            external_record_id=external_record_id,
         )
 
     def _odoo_read_failure(self, arguments: Mapping[str, Any], record: Any, structured: Any) -> Any:
@@ -333,32 +341,33 @@ class ToolGateway:
 
         arguments_for_audit = dict(arguments)
         create_attempted = False
+        create_returned = False
+        validation_rejected = False
 
         try:
             product_ids = sorted({line["product_id"] for line in arguments["lines"]})
+            # Product existence pre-check (TOOL_CONTRACTS guardrail): the read
+            # doubles as the pre-create existence probe, so a nonexistent
+            # product fails BEFORE any ERP mutation with ENTITY_NOT_FOUND.
             product_records = odoo_client.read("product.product", product_ids, ["list_price"])
-            price_by_id: dict[int, Decimal] = {}
-            for product_record in product_records:
-                if not isinstance(product_record, Mapping) or "id" not in product_record or "list_price" not in product_record:
-                    continue
-                try:
-                    price_by_id[int(product_record["id"])] = Decimal(str(product_record["list_price"]))
-                except (InvalidOperation, TypeError, ValueError):
-                    continue
-            if len(price_by_id) != len(product_ids):
+            found_ids = {
+                int(product_record["id"])
+                for product_record in product_records
+                if isinstance(product_record, Mapping) and "id" in product_record
+                and not isinstance(product_record["id"], bool)
+            }
+            if not set(product_ids) <= found_ids:
                 verification = self._verification_failure(
                     arguments,
                     record,
-                    "Product pricing data is incomplete for amount verification.",
+                    "One or more requested products do not exist in the ERP.",
+                    error_code=ENTITY_NOT_FOUND,
                 )
             else:
-                expected_amount_total = sum(
-                    price_by_id[line["product_id"]] * Decimal(str(line["quantity"]))
-                    for line in arguments["lines"]
-                )
                 payload = self._build_odoo_payload(arguments, record.idempotency_key)
-                created_ids = odoo_client.create("sale.order", payload)
                 create_attempted = True
+                created_ids = odoo_client.create("sale.order", payload)
+                create_returned = True
                 if not isinstance(created_ids, list) or len(created_ids) != 1 or not isinstance(created_ids[0], int):
                     verification = self._verification_failure(
                         arguments,
@@ -373,7 +382,6 @@ class ToolGateway:
                             arguments["customer_id"],
                             arguments["lines"],
                             record.idempotency_key,
-                            expected_amount_total=float(expected_amount_total),
                         )
                     except Exception as error:
                         structured = translate_odoo_exception(error)
@@ -382,21 +390,54 @@ class ToolGateway:
                         if passed.passed:
                             verification = self._verification_success(arguments, record, created_ids[0])
                         else:
-                            verification = self._verification_failure(arguments, record, passed.error)
+                            # The order exists in Odoo (we just read it back);
+                            # keep its id as provenance for reconciliation (F-07).
+                            verification = self._verification_failure(
+                                arguments,
+                                record,
+                                passed.error,
+                                external_record_id=str(created_ids[0]),
+                            )
         except Exception as error:
             structured = translate_odoo_exception(error)
             if structured.retryable:
-                self.idempotency_store.fail(
-                    record.idempotency_key,
-                    request_fingerprint=record.request_fingerprint,
-                    tool_name=record.tool_name,
-                    tool_version=record.tool_version,
-                    tenant_id=record.tenant_id,
-                    user_id=record.user_id,
-                    execution_id=record.execution_id,
-                    outcome="ambiguous",
-                    error_code=structured.code,
-                )
+                if create_attempted:
+                    # The create may have committed; the outcome is genuinely
+                    # ambiguous and the key must never re-execute.
+                    self.idempotency_store.fail(
+                        record.idempotency_key,
+                        request_fingerprint=record.request_fingerprint,
+                        tool_name=record.tool_name,
+                        tool_version=record.tool_version,
+                        tenant_id=record.tenant_id,
+                        user_id=record.user_id,
+                        execution_id=record.execution_id,
+                        outcome=AMBIGUOUS,
+                        error_code=structured.code,
+                    )
+                else:
+                    # Nothing reached Odoo: release the reservation so the
+                    # identical request can be retried after the transient
+                    # failure instead of deadlocking on reconciliation.
+                    try:
+                        self.idempotency_store.release(
+                            record.idempotency_key,
+                            tenant_id=record.tenant_id,
+                            user_id=record.user_id,
+                            execution_id=record.execution_id,
+                        )
+                    except (IdempotencyStoreError, IllegalIdempotencyTransition):
+                        self.idempotency_store.fail(
+                            record.idempotency_key,
+                            request_fingerprint=record.request_fingerprint,
+                            tool_name=record.tool_name,
+                            tool_version=record.tool_version,
+                            tenant_id=record.tenant_id,
+                            user_id=record.user_id,
+                            execution_id=record.execution_id,
+                            outcome=AMBIGUOUS,
+                            error_code=structured.code,
+                        )
                 verification = {
                     "status": "ambiguous",
                     "reason": structured.message,
@@ -414,14 +455,22 @@ class ToolGateway:
                     user_id=user_id,
                     tenant_id=tenant_id,
                 )
+            # Odoo's own validation rejection (422) happens before any record
+            # is written; treat it as a clean not-committed failure.
+            validation_rejected = (
+                create_attempted
+                and not create_returned
+                and structured.code == "ERP_VALIDATION_ERROR"
+            )
             verification = self._odoo_write_failure(arguments, record, structured)
 
         if verification["status"] == "error":
-            # Definitive failure. Whether the create call fired decides the
-            # retry policy: pre-create failures are safe to release for retry;
-            # post-create failures left ERP state unknown and reconcile as
-            # ambiguous instead of replaying an error as success (B4 fix).
-            if create_attempted:
+            # Definitive failure. Whether ERP state may have changed decides
+            # the retry policy: not-committed failures release for retry;
+            # uncertain ones reconcile as ambiguous instead of replaying an
+            # error as success (B4 fix) and instead of risking a duplicate.
+            committed_uncertain = create_returned or (create_attempted and not validation_rejected)
+            if committed_uncertain:
                 self.idempotency_store.fail(
                     record.idempotency_key,
                     request_fingerprint=record.request_fingerprint,
@@ -491,6 +540,24 @@ class ToolGateway:
         """Approve the server-created proposal and execute it through the gateway."""
         approval = self.confirmation_store.approve(proposal_id, user_id, tenant_id)
         if approval.status != "approved":
+            if approval.status == EXPIRED:
+                # An expired proposal can never execute; leaving its pending
+                # reservation would permanently block the identical request
+                # (audit F-09). Same guard pattern as the denial path.
+                proposal = self.confirmation_store.get_proposal(proposal_id)
+                if proposal is not None:
+                    key = compute_idempotency_key(tenant_id, user_id, proposal.tool_name, proposal.arguments)
+                    record = self.idempotency_store.get(key, tenant_id, user_id)
+                    if record is not None and record.state == "pending":
+                        try:
+                            self.idempotency_store.release(
+                                key,
+                                tenant_id=tenant_id,
+                                user_id=user_id,
+                                execution_id=record.execution_id,
+                            )
+                        except (IdempotencyStoreError, IllegalIdempotencyTransition):
+                            pass
             return self._approval_failure(approval)
         return self.execute_verified(
             approval.idempotency_key,
@@ -694,6 +761,16 @@ class ToolGateway:
             return self._process_mutating(context, contract, policy_decision)
 
         if context.odoo_client is not None:
+            # Fail-closed: reads execute only on an explicit allow decision
+            # (e.g. a future policy demanding confirmation for a read must not
+            # silently execute unconfirmed).
+            if policy_decision.decision != ALLOWED:
+                return self._final_result(
+                    context,
+                    status=DENIED,
+                    error_code=POLICY_DENIED,
+                    reason=policy_decision.reason,
+                )
             return self._execute_read(context, contract)
 
         return self._final_result(
@@ -941,30 +1018,34 @@ class ToolGateway:
         else:
             result_status = "error"
         try:
-            audit_record = self.audit_store.append(
-                {
-                    "request_id": record.request_id,
-                    "tool_call_id": context.tool_call_id,
-                    "tenant_id": record.tenant_id,
-                    "user_id": record.user_id,
-                    "odoo_user": record.user_id,
-                    "tool_name": record.tool_name,
-                    "tool_version": record.tool_version,
-                    "arguments": dict(record.arguments),
-                    "policy_decision": context.policy_decision,
-                    "start_time": end_time,
-                    "end_time": end_time,
-                    "result_status": result_status,
-                    "error_code": result.error_code,
-                    "idempotency_key": context.idempotency_key,
-                    "execution_id": context.execution_id,
-                    "external_record_id": (
-                        context.replay_result.get("order_id")
-                        if context.replay_result
-                        else None
-                    ),
-                }
-            )
+            audit_payload = {
+                "request_id": record.request_id,
+                "tool_call_id": context.tool_call_id,
+                "tenant_id": record.tenant_id,
+                "user_id": record.user_id,
+                "odoo_user": record.user_id,
+                "tool_name": record.tool_name,
+                "tool_version": record.tool_version,
+                "arguments": dict(record.arguments),
+                "policy_decision": context.policy_decision,
+                "start_time": end_time,
+                "end_time": end_time,
+                "result_status": result_status,
+                "error_code": result.error_code,
+                "idempotency_key": context.idempotency_key,
+                "execution_id": context.execution_id,
+                "external_record_id": (
+                    context.replay_result.get("order_id")
+                    if context.replay_result
+                    else None
+                ),
+            }
+            if result.proposal is not None:
+                # Link the audit row to the proposal it created so the trail
+                # answers "what was proposed, under which operation hash" (F-14).
+                audit_payload["proposal_id"] = result.proposal.get("proposal_id")
+                audit_payload["operation_hash"] = result.proposal.get("operation_hash")
+            audit_record = self.audit_store.append(audit_payload)
             return int(audit_record["audit_id"])
         except Exception:
             return None

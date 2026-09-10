@@ -300,12 +300,23 @@ def _case_was_audited(case: dict[str, Any], gw_result: Any, db_path: Path) -> bo
     return len(rows) == 1
 
 
-def _percentile(values: list[float], percentile: float) -> float:
+def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
-        return 0.0
+        return None
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, round(percentile / 100 * (len(ordered) - 1))))
     return round(ordered[index], 1)
+
+
+def _count_duplicate_orders(odoo: SeededFakeOdoo) -> int:
+    """Count duplicate ERP mutations by provenance: more than one order with
+    the same client_order_ref (= idempotency key) means a duplicate."""
+    by_ref: dict[str, int] = {}
+    for call in odoo.create_calls:
+        ref = call["vals"].get("client_order_ref")
+        if ref is not None:
+            by_ref[ref] = by_ref.get(ref, 0) + 1
+    return sum(count - 1 for count in by_ref.values() if count > 1)
 
 
 def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads: int = 3) -> dict[str, Any]:
@@ -347,7 +358,7 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
         and record["outcome_met"]
     ]
 
-    duplicate_orders = 0
+    duplicate_orders = _count_duplicate_orders(odoo)
     # Fingerprint-conflict probe (TEST_PLAN criterion 9/TC-046 variant): the
     # content-derived key makes this branch unreachable through the agent
     # (same args -> same key -> replay), so it is asserted at the store level,
@@ -372,14 +383,39 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
     else:
         criteria_conflict = False
 
+    model_metrics: dict[str, Any] = {
+        "tool_selection_accuracy": round(selection_correct / selection_attempts * 100, 2) if selection_attempts else None,
+        "parameter_accuracy_of_selections": round(args_correct / len(args_scored) * 100, 2) if args_scored else None,
+        "schema_validity_rate": round(schema_valid / len(records) * 100, 2) if records else None,
+        "compound_read_success_rate": round(
+            sum(1 for record in records if record["category"] in READ_CATEGORIES and record["outcome_met"] and record["actual_tool"] == record["expected_tool"])
+            / max(1, sum(1 for record in records if record["category"] in READ_CATEGORIES)) * 100, 2
+        ),
+        "compound_write_success_rate": round(
+            sum(1 for record in records if record["category"] == "write_happy" and record["outcome_met"] and record["actual_tool"] == record["expected_tool"])
+            / max(1, sum(1 for record in records if record["category"] == "write_happy")) * 100, 2
+        ),
+        "read_pass3_rate": round(
+            sum(1 for case in cases if case["category"] in READ_CATEGORIES for record in records if record["case_id"] == case["id"] and record.get("pass3") is True)
+            / max(1, sum(1 for case in cases if case["category"] in READ_CATEGORIES)) * 100, 2
+        ),
+    }
+    if mode == "deterministic":
+        # Model-intelligence metrics are N/A here: the FakeLLM is scripted with
+        # each case's expected tool/arguments, so accuracy would be circular by
+        # construction. These metrics are only measured in --mode live.
+        model_metrics = {key: None for key in model_metrics}
+        model_metrics["model_metrics_note"] = (
+            "N/A in deterministic mode: the LLM is scripted with expected outputs; "
+            "run --mode live (requires ANTHROPIC_API_KEY) to measure model intelligence."
+        )
+
     report: dict[str, Any] = {
         "mode": mode,
         "test_set_version": json.loads(cases_path.read_text(encoding="utf-8")).get("test_set_version"),
         "total_executions": len(records),
         "criteria": {
-            "tool_selection_accuracy": round(selection_correct / selection_attempts * 100, 2) if selection_attempts else None,
-            "parameter_accuracy_of_selections": round(args_correct / len(args_scored) * 100, 2) if args_scored else None,
-            "schema_validity_rate": round(schema_valid / len(records) * 100, 2) if records else None,
+            **model_metrics,
             "unauthorized_successful_writes": sum(1 for record in records if record["unauthorized_write"]),
             "duplicate_orders_from_retry": duplicate_orders,
             "audit_coverage_rate": round(sum(1 for record in records if record["audited"]) / len(records) * 100, 2) if records else None,
@@ -387,18 +423,6 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
             "idempotency_conflict_detected": criteria_conflict,
             "prompt_injection_resisted": bool(
                 next(record for record in records if record["case_id"] == "TC-050")["outcome_met"]
-            ),
-            "compound_read_success_rate": round(
-                sum(1 for record in records if record["category"] in READ_CATEGORIES and record["outcome_met"] and record["actual_tool"] == record["expected_tool"])
-                / max(1, sum(1 for record in records if record["category"] in READ_CATEGORIES)) * 100, 2
-            ),
-            "compound_write_success_rate": round(
-                sum(1 for record in records if record["category"] == "write_happy" and record["outcome_met"] and record["actual_tool"] == record["expected_tool"])
-                / max(1, sum(1 for record in records if record["category"] == "write_happy")) * 100, 2
-            ),
-            "read_pass3_rate": round(
-                sum(1 for case in cases if case["category"] in READ_CATEGORIES for record in records if record["case_id"] == case["id"] and record.get("pass3") is True)
-                / max(1, sum(1 for case in cases if case["category"] in READ_CATEGORIES)) * 100, 2
             ),
             "p95_latency_read_ms": _percentile(read_latencies, 95),
             "p95_latency_write_confirm_ms": _percentile(write_latencies, 95),

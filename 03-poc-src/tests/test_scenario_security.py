@@ -45,7 +45,7 @@ class _FakeOdoo:
             return [{"id": 7, "list_price": 50.0}]
         if model == "sale.order":
             return [{"id": 1, "partner_id": (42, "Test"), "state": "draft",
-                     "amount_total": 100.0, "order_line": [1],
+                     "amount_total": 100.0, "amount_untaxed": 100.0, "order_line": [1],
                      "client_order_ref": client_order_ref}]
         if model == "sale.order.line":
             return [{"id": 1, "product_id": (7, "P"), "product_uom_qty": 2}]

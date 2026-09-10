@@ -70,6 +70,7 @@ def _verified_record(order_id: int = 1, provenance: str = "a" * 32) -> dict[str,
         "partner_id": (42, "Test Customer"),
         "state": "draft",
         "amount_total": 100.0,
+        "amount_untaxed": 100.0,
         "order_line": [LINE_ID],
         "client_order_ref": provenance,
     }
@@ -102,24 +103,24 @@ def test_unit_verifier_accepts_expected_state():
         42,
         ARGS["lines"],
         "a" * 32,
-        expected_amount_total=100.0,
     )
     assert result.passed
 
 
-def test_unit_verifier_accepts_exact_computed_total():
+def test_unit_verifier_rejects_negative_total():
+    # Financial contract per TECHNICAL_DESIGN §6: totals are Odoo-computed and
+    # only checked for presence and non-negativity — taxes/pricelists are not
+    # reproduced locally (audit F-06 resolution).
+    order = _verified_record()
+    order.update({"amount_total": -5.0, "amount_untaxed": -5.0})
     result = verify_sales_order_creation(
-        FakeOdooClient(
-            [_verified_record()],
-            _line_records(),
-        ),
+        FakeOdooClient([order], _line_records()),
         1,
         42,
         ARGS["lines"],
         "a" * 32,
-        expected_amount_total=100.0,
     )
-    assert result.passed is True
+    assert not result.passed
 
 
 @pytest.mark.parametrize(
@@ -127,7 +128,7 @@ def test_unit_verifier_accepts_exact_computed_total():
     [
         lambda order, lines: order.update({"partner_id": (43, "Wrong Customer")}),
         lambda order, lines: order.update({"state": "sent"}),
-        lambda order, lines: order.update({"amount_total": 500.0}),
+        lambda order, lines: order.update({"amount_total": None, "amount_untaxed": None}),
         lambda order, lines: order.update({"client_order_ref": "b" * 32}),
         lambda order, lines: lines[0].update({"product_id": (8, "Wrong Product")}),
         lambda order, lines: lines[0].update({"product_uom_qty": 3}),
@@ -135,7 +136,7 @@ def test_unit_verifier_accepts_exact_computed_total():
     ids=[
         "wrong_customer",
         "wrong_state",
-        "wrong_amount",
+        "missing_amount",
         "wrong_provenance",
         "wrong_product",
         "wrong_quantity",
@@ -151,7 +152,6 @@ def test_unit_verifier_rejects_every_state_mismatch(mutate):
         42,
         ARGS["lines"],
         "a" * 32,
-        expected_amount_total=100.0,
     )
     assert not result.passed
 
@@ -199,7 +199,7 @@ def test_successful_write_is_verified_and_audited(tmp_path: Path):
     [
         lambda order, lines: order.update({"partner_id": (43, "Wrong Customer")}),
         lambda order, lines: order.update({"state": "sent"}),
-        lambda order, lines: order.update({"amount_total": 500.0}),
+        lambda order, lines: order.update({"amount_total": None, "amount_untaxed": None}),
         lambda order, lines: order.update({"client_order_ref": "b" * 32}),
         lambda order, lines: lines[0].update({"product_id": (8, "Wrong Product")}),
         lambda order, lines: lines[0].update({"product_uom_qty": 3}),
@@ -207,7 +207,7 @@ def test_successful_write_is_verified_and_audited(tmp_path: Path):
     ids=[
         "wrong_customer",
         "wrong_state",
-        "wrong_amount",
+        "missing_amount",
         "wrong_provenance",
         "wrong_product",
         "wrong_quantity",
@@ -238,8 +238,16 @@ def test_read_back_mismatch_returns_verification_failed_and_audits(tmp_path: Pat
 
 def test_read_timeout_is_retryable_erp_connection_error(tmp_path: Path):
     gateway, approval, _proposal = _confirmed_execution(tmp_path)
-    client = FakeOdooClient()
-    client.read_error = OdooTimeoutError("timeout", "timeout", None)
+
+    class PostCreateReadTimeout(FakeOdooClient):
+        # Timeout fires on the post-create read-back only, so the failure is
+        # genuinely ambiguous (the create already committed).
+        def read(self, model, ids, fields):
+            if model == "sale.order":
+                raise OdooTimeoutError("timeout", "timeout", None)
+            return super().read(model, ids, fields)
+
+    client = PostCreateReadTimeout()
     result = gateway.execute_verified(approval.idempotency_key, approval.execution_id, ARGS, client, tenant_id=TENANT, user_id=USER)
 
     error = result.structured_error.to_dict()["error"]

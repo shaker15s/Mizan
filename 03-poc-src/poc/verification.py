@@ -33,9 +33,14 @@ def verify_sales_order_creation(
     expected_customer_id: int,
     expected_lines: Sequence[Mapping[str, Any]],
     expected_client_order_ref: str,
-    expected_amount_total: float | None = None,
 ) -> VerificationResult:
     """Verify the created draft order against the gateway-owned request.
+
+    Per TECHNICAL_DESIGN §6 the financial total is Odoo-computed ("prices,
+    taxes, and totals are computed by Odoo"): the verifier checks that a total
+    exists and is non-negative — it does NOT reproduce tax/pricelist math.
+    Everything the gateway owns (identity, state, provenance, per-line
+    product and quantity) is verified strictly.
 
     The transport exceptions deliberately propagate so the Gateway can map
     them through the canonical error taxonomy instead of inventing another
@@ -68,20 +73,19 @@ def verify_sales_order_creation(
     if order.get("state") != "draft":
         return VerificationResult(passed=False, error="Sales order is not in draft state.")
     actual_amount_total = order.get("amount_total")
-    if isinstance(actual_amount_total, bool) or not isinstance(actual_amount_total, (int, float)):
+    if (
+        isinstance(actual_amount_total, bool)
+        or not isinstance(actual_amount_total, (int, float))
+        or actual_amount_total < 0
+    ):
         return VerificationResult(passed=False, error="Sales order total is missing or invalid.")
-    if expected_amount_total is not None:
-        # Compare against the tax-exclusive total: taxes and pricelist rules are
-        # Odoo-owned, so amount_total can legitimately differ from the sum of
-        # list_price x qty while the untaxed total may not (B5 fix).
-        reference = order.get("amount_untaxed")
-        if isinstance(reference, bool) or not isinstance(reference, (int, float)):
-            reference = actual_amount_total
-        if Decimal(str(reference)) != Decimal(str(expected_amount_total)):
-            return VerificationResult(
-                passed=False,
-                error="Sales order total does not match the authorized operation.",
-            )
+    amount_untaxed = order.get("amount_untaxed")
+    if (
+        isinstance(amount_untaxed, bool)
+        or not isinstance(amount_untaxed, (int, float))
+        or amount_untaxed < 0
+    ):
+        return VerificationResult(passed=False, error="Sales order untaxed total is missing or invalid.")
 
     actual_lines = order.get("order_line")
     if not isinstance(actual_lines, list) or len(actual_lines) != len(expected_lines):

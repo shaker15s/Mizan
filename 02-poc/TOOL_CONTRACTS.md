@@ -367,38 +367,43 @@ for schema_file in Path("schemas").glob("*.json"):
 
 ## Authorization Policy
 
+Implemented schema (`03-poc-src/users.yaml`). The per-user Odoo credential
+mapping deliberately does NOT live in the policy file — it is a bootstrap
+concern (`poc/bootstrap.py::_ODOO_API_KEY_VARS`), keeping the policy purely
+about authorization:
+
 ```yaml
-# users.yaml
-users:
-  sales_user@test:
-    odoo_user: sales_user@test
-    odoo_api_key_env: ODOO_API_KEY_SALES_USER
-    role: sales
-    allowed_tools:
-      - customer.search
-      - customer.get
-      - product.search
-      - sales.order.create    # requires confirmation
-      - sales.order.get
+# users.yaml (implemented schema)
+sales_user@test:
+  tenant_id: poc_tenant_001
+  role: sales
+  allowed_tools:
+    - customer.search
+    - customer.get
+    - product.search
+    - sales.order.create    # requires confirmation
+    - sales.order.get
 
-  readonly_user@test:
-    odoo_user: readonly_user@test
-    odoo_api_key_env: ODOO_API_KEY_READONLY_USER
-    role: readonly
-    allowed_tools:
-      - customer.search
-      - customer.get
-      - product.search
-      - sales.order.get
+readonly_user@test:
+  tenant_id: poc_tenant_001
+  role: readonly
+  allowed_tools:
+    - customer.search
+    - customer.get
+    - product.search
+    - sales.order.get
 
-  no_access_user@test:
-    odoo_user: no_access_user@test
-    odoo_api_key_env: ODOO_API_KEY_NO_ACCESS_USER
-    role: none
-    allowed_tools: []
+no_access_user@test:
+  tenant_id: poc_tenant_001
+  role: none
+  allowed_tools: []
 ```
 
-**Policy evaluation is deterministic.** The gateway checks: `tool_name in users[user_id].allowed_tools`. If not present → `PERMISSION_DENIED`. The LLM is never consulted for authorization.
+**Policy evaluation is deterministic.** A user is allowed when `tool_name` is
+in `allowed_tools` and NOT in `denied_tools`; `denied_tools` takes precedence
+over `allowed_tools` (documented precedence — audit F-19). Unknown users,
+unknown tenants, malformed policy files, and unknown tools are denied
+(fail-closed). The LLM is never consulted for authorization.
 
 **Re-authorization at confirmation-execution time:** the policy above is evaluated when the proposal is created. It is evaluated AGAIN (same check, same YAML, current registry state, including the tool's current `tool_version`) when the user confirms. A proposal MUST NOT execute based only on the state captured when it was created — see `SECURITY_MODEL.md` §5.3 for the full re-authorization checklist.
 

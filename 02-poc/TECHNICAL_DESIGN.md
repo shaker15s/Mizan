@@ -80,7 +80,12 @@ agent-native-erp/
 - `agent.py` imports `gateway.py` and calls `gateway.handle_tool_call(request)`
 - `agent.py` does NOT import `odoo_client.py`
 - `agent.py` does NOT have access to Odoo API keys
-- `gateway.py` is the ONLY module that imports `odoo_client.py`
+- `gateway.py` is the only module that imports `odoo_client.py` for ERP
+  execution, with one deliberate exception: `bootstrap.py`, the composition
+  root, imports it solely to construct per-user clients from the environment
+  (audit F-20). All untrusted-path modules (`agent_runtime.py`, `main.py`,
+  `tool_contracts.py`, `errors.py`) import neither `odoo_client` nor the
+  gateway's execution internals — enforced by import-scanner tests.
 - The LLM never holds Odoo credentials, decides authorization, bypasses confirmation, directly calls Odoo, writes audit records, or decides tenant identity
 
 **Trust-boundary caveat (critical):** The single-process architecture provides **engineering/module isolation, NOT a true security boundary.** A compromised or buggy agent module running in the same OS process can, in principle, access the same memory, file handles, and environment variables as the gateway. The module-import rules above are enforced by convention, code review, and automated import-scanner tests — they are not OS-enforced isolation.

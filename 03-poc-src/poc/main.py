@@ -18,10 +18,22 @@ def _build_payload(result: AgentResult) -> dict[str, Any]:
     structured_error = result.structured_error
     gateway_result = result.gateway_result
     status = gateway_result.status if gateway_result is not None else result.outcome
+    payload_result = (
+        dict(gateway_result.result)
+        if gateway_result is not None and gateway_result.result is not None
+        else None
+    )
     if structured_error is not None:
         success = False
-    elif status in _SUCCESS_STATUSES or result.outcome in _NON_ERROR_OUTCOMES:
-        success = True
+    elif status in _SUCCESS_STATUSES:
+        # Success requires server-executed evidence. An accepted decision
+        # whose result was never populated (control-plane-only read mode)
+        # is "ready", not "succeeded" (audit F-05).
+        success = payload_result is not None
+    elif result.outcome in _NON_ERROR_OUTCOMES:
+        # A text-only model response is not an executed operation; model
+        # prose must never be able to set the success flag (audit F-04).
+        success = None
     elif status == CONFIRMATION_REQUIRED:
         success = None
     else:
@@ -30,7 +42,7 @@ def _build_payload(result: AgentResult) -> dict[str, Any]:
         "success": success,
         "status": status,
         "response_ar": result.response_ar,
-        "result": dict(gateway_result.result) if gateway_result is not None and gateway_result.result is not None else None,
+        "result": payload_result,
         "error": structured_error.to_dict()["error"] if structured_error is not None else None,
         "audit_id": gateway_result.audit_id if gateway_result is not None else None,
     }

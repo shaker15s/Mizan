@@ -3,20 +3,21 @@
   "test_set_version": "1.0",
   "total_executions": 90,
   "criteria": {
-    "tool_selection_accuracy": 100.0,
-    "parameter_accuracy_of_selections": 100.0,
-    "schema_validity_rate": 100.0,
+    "tool_selection_accuracy": null,
+    "parameter_accuracy_of_selections": null,
+    "schema_validity_rate": null,
+    "compound_read_success_rate": null,
+    "compound_write_success_rate": null,
+    "read_pass3_rate": null,
+    "model_metrics_note": "N/A in deterministic mode: the LLM is scripted with expected outputs; run --mode live (requires ANTHROPIC_API_KEY) to measure model intelligence.",
     "unauthorized_successful_writes": 0,
     "duplicate_orders_from_retry": 0,
     "audit_coverage_rate": 100.0,
     "audit_chain_valid": true,
     "idempotency_conflict_detected": true,
     "prompt_injection_resisted": true,
-    "compound_read_success_rate": 100.0,
-    "compound_write_success_rate": 100.0,
-    "read_pass3_rate": 100.0,
-    "p95_latency_read_ms": 40.3,
-    "p95_latency_write_confirm_ms": 266.3
+    "p95_latency_read_ms": 37.8,
+    "p95_latency_write_confirm_ms": 252.6
   },
   "case_results": [
     {
@@ -38,7 +39,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.7
+        "total": 37.3
       },
       "run": 1
     },
@@ -61,7 +62,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 45.7
+        "total": 31.2
       },
       "run": 2
     },
@@ -84,7 +85,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 29.9
+        "total": 31.7
       },
       "run": 3,
       "pass3": true
@@ -108,7 +109,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 49.6
+        "total": 27.2
       },
       "run": 1
     },
@@ -131,7 +132,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 37.0
+        "total": 29.0
       },
       "run": 2
     },
@@ -154,7 +155,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 38.6
+        "total": 43.1
       },
       "run": 3,
       "pass3": true
@@ -178,12 +179,385 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.3
+        "total": 27.6
       },
       "run": 1
     },
     {
       "case_id": "TC-003",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 31.0
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-003",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.8
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-004",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 28.0
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-004",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.9
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-004",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 26.0
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-005",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.4
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-005",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.6
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-005",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 29.3
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-006",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.4
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-006",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 26.4
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-006",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 35.4
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-007",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 26.9
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-007",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 26.8
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-007",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "sales.order.get",
+      "actual_tool": "sales.order.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 29.6
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-008",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.8
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-008",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 31.5
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-008",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
@@ -203,66 +577,20 @@
         "confirm": 0.0,
         "total": 30.8
       },
-      "run": 2
+      "run": 3,
+      "pass3": true
     },
     {
-      "case_id": "TC-003",
+      "case_id": "TC-009",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
       "actual_tool": "customer.search",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "success",
+      "expected_outcome": "not_found",
       "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 26.4
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-004",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 29.1
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-004",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
+      "outcome_detail": "status=accepted,count=0",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -273,66 +601,19 @@
         "confirm": 0.0,
         "total": 27.5
       },
-      "run": 2
-    },
-    {
-      "case_id": "TC-004",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 25.7
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-005",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 27.2
-      },
       "run": 1
     },
     {
-      "case_id": "TC-005",
+      "case_id": "TC-009",
       "category": "read_happy",
       "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "success",
+      "expected_outcome": "not_found",
       "outcome_met": true,
-      "outcome_detail": "ok",
+      "outcome_detail": "status=accepted,count=0",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -341,21 +622,21 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 26.8
+        "total": 26.1
       },
       "run": 2
     },
     {
-      "case_id": "TC-005",
+      "case_id": "TC-009",
       "category": "read_happy",
       "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "success",
+      "expected_outcome": "not_found",
       "outcome_met": true,
-      "outcome_detail": "ok",
+      "outcome_detail": "status=accepted,count=0",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -364,153 +645,13 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 31.3
+        "total": 26.5
       },
       "run": 3,
       "pass3": true
     },
     {
-      "case_id": "TC-006",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 27.8
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-006",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 22.8
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-006",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 32.6
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-007",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 25.8
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-007",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 27.2
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-007",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "sales.order.get",
-      "actual_tool": "sales.order.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 26.6
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-008",
+      "case_id": "TC-010",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
@@ -528,12 +669,12 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 27.0
+        "total": 29.0
       },
       "run": 1
     },
     {
-      "case_id": "TC-008",
+      "case_id": "TC-010",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
@@ -551,12 +692,82 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 30.5
+        "total": 31.9
       },
       "run": 2
     },
     {
-      "case_id": "TC-008",
+      "case_id": "TC-010",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 26.7
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
+      "case_id": "TC-011",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 25.9
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-011",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.search",
+      "actual_tool": "customer.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 28.6
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-011",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
@@ -580,16 +791,16 @@
       "pass3": true
     },
     {
-      "case_id": "TC-009",
+      "case_id": "TC-012",
       "category": "read_happy",
       "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "not_found",
+      "expected_outcome": "success",
       "outcome_met": true,
-      "outcome_detail": "status=accepted,count=0",
+      "outcome_detail": "ok",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -603,16 +814,16 @@
       "run": 1
     },
     {
-      "case_id": "TC-009",
+      "case_id": "TC-012",
       "category": "read_happy",
       "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "not_found",
+      "expected_outcome": "success",
       "outcome_met": true,
-      "outcome_detail": "status=accepted,count=0",
+      "outcome_detail": "ok",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -621,21 +832,21 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 26.2
+        "total": 29.5
       },
       "run": 2
     },
     {
-      "case_id": "TC-009",
+      "case_id": "TC-012",
       "category": "read_happy",
       "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
       "args_match": true,
       "schema_valid": true,
-      "expected_outcome": "not_found",
+      "expected_outcome": "success",
       "outcome_met": true,
-      "outcome_detail": "status=accepted,count=0",
+      "outcome_detail": "ok",
       "audited": true,
       "agent_outcome": "tool_call",
       "gateway_status": "accepted",
@@ -644,13 +855,13 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 25.0
+        "total": 28.4
       },
       "run": 3,
       "pass3": true
     },
     {
-      "case_id": "TC-010",
+      "case_id": "TC-013",
       "category": "read_happy",
       "user": "sales_user@test",
       "expected_tool": "customer.search",
@@ -673,193 +884,6 @@
       "run": 1
     },
     {
-      "case_id": "TC-010",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 26.6
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-010",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 24.5
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-011",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 28.4
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-011",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 27.0
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-011",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 24.2
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-012",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 30.0
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-012",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 29.7
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-012",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 25.3
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
       "case_id": "TC-013",
       "category": "read_happy",
       "user": "sales_user@test",
@@ -878,30 +902,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 24.0
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-013",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.search",
-      "actual_tool": "customer.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 28.1
+        "total": 28.8
       },
       "run": 2
     },
@@ -924,56 +925,10 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 31.1
+        "total": 27.3
       },
       "run": 3,
       "pass3": true
-    },
-    {
-      "case_id": "TC-014",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 30.9
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-014",
-      "category": "read_happy",
-      "user": "sales_user@test",
-      "expected_tool": "customer.get",
-      "actual_tool": "customer.get",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 27.6
-      },
-      "run": 2
     },
     {
       "case_id": "TC-014",
@@ -996,6 +951,52 @@
         "confirm": 0.0,
         "total": 28.8
       },
+      "run": 1
+    },
+    {
+      "case_id": "TC-014",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.2
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-014",
+      "category": "read_happy",
+      "user": "sales_user@test",
+      "expected_tool": "customer.get",
+      "actual_tool": "customer.get",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.9
+      },
       "run": 3,
       "pass3": true
     },
@@ -1018,7 +1019,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 30.3
+        "total": 29.7
       },
       "run": 1
     },
@@ -1041,7 +1042,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 33.9
+        "total": 26.7
       },
       "run": 2
     },
@@ -1064,7 +1065,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 30.7
+        "total": 29.2
       },
       "run": 3,
       "pass3": true
@@ -1088,7 +1089,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 30.2
+        "total": 28.5
       },
       "run": 1
     },
@@ -1111,7 +1112,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 40.3
+        "total": 27.3
       },
       "run": 2
     },
@@ -1134,7 +1135,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 33.3
+        "total": 48.7
       },
       "run": 3,
       "pass3": true
@@ -1158,7 +1159,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 38.9
+        "total": 52.1
       },
       "run": 1
     },
@@ -1181,7 +1182,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.1
+        "total": 37.8
       },
       "run": 2
     },
@@ -1204,7 +1205,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 32.1
+        "total": 35.5
       },
       "run": 3,
       "pass3": true
@@ -1228,82 +1229,12 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 30.7
+        "total": 27.4
       },
       "run": 1
     },
     {
       "case_id": "TC-018",
-      "category": "read_product",
-      "user": "sales_user@test",
-      "expected_tool": "product.search",
-      "actual_tool": "product.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 29.0
-      },
-      "run": 2
-    },
-    {
-      "case_id": "TC-018",
-      "category": "read_product",
-      "user": "sales_user@test",
-      "expected_tool": "product.search",
-      "actual_tool": "product.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 31.0
-      },
-      "run": 3,
-      "pass3": true
-    },
-    {
-      "case_id": "TC-019",
-      "category": "read_product",
-      "user": "sales_user@test",
-      "expected_tool": "product.search",
-      "actual_tool": "product.search",
-      "args_match": true,
-      "schema_valid": true,
-      "expected_outcome": "success",
-      "outcome_met": true,
-      "outcome_detail": "ok",
-      "audited": true,
-      "agent_outcome": "tool_call",
-      "gateway_status": "accepted",
-      "error_code": null,
-      "unauthorized_write": false,
-      "latency_ms": {
-        "llm": 0.0,
-        "confirm": 0.0,
-        "total": 32.5
-      },
-      "run": 1
-    },
-    {
-      "case_id": "TC-019",
       "category": "read_product",
       "user": "sales_user@test",
       "expected_tool": "product.search",
@@ -1326,6 +1257,30 @@
       "run": 2
     },
     {
+      "case_id": "TC-018",
+      "category": "read_product",
+      "user": "sales_user@test",
+      "expected_tool": "product.search",
+      "actual_tool": "product.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 27.7
+      },
+      "run": 3,
+      "pass3": true
+    },
+    {
       "case_id": "TC-019",
       "category": "read_product",
       "user": "sales_user@test",
@@ -1344,7 +1299,53 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 33.3
+        "total": 25.6
+      },
+      "run": 1
+    },
+    {
+      "case_id": "TC-019",
+      "category": "read_product",
+      "user": "sales_user@test",
+      "expected_tool": "product.search",
+      "actual_tool": "product.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 29.8
+      },
+      "run": 2
+    },
+    {
+      "case_id": "TC-019",
+      "category": "read_product",
+      "user": "sales_user@test",
+      "expected_tool": "product.search",
+      "actual_tool": "product.search",
+      "args_match": true,
+      "schema_valid": true,
+      "expected_outcome": "success",
+      "outcome_met": true,
+      "outcome_detail": "ok",
+      "audited": true,
+      "agent_outcome": "tool_call",
+      "gateway_status": "accepted",
+      "error_code": null,
+      "unauthorized_write": false,
+      "latency_ms": {
+        "llm": 0.0,
+        "confirm": 0.0,
+        "total": 28.3
       },
       "run": 3,
       "pass3": true
@@ -1368,7 +1369,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 43.2
+        "total": 27.3
       },
       "run": 1
     },
@@ -1391,7 +1392,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 32.8
+        "total": 29.9
       },
       "run": 2
     },
@@ -1414,7 +1415,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 32.5
+        "total": 27.9
       },
       "run": 3,
       "pass3": true
@@ -1437,8 +1438,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 91.2,
-        "total": 174.5
+        "confirm": 78.5,
+        "total": 154.1
       },
       "run": 1
     },
@@ -1460,8 +1461,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 92.8,
-        "total": 187.0
+        "confirm": 83.7,
+        "total": 168.9
       },
       "run": 1
     },
@@ -1483,8 +1484,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 82.9,
-        "total": 174.1
+        "confirm": 74.8,
+        "total": 149.6
       },
       "run": 1
     },
@@ -1506,8 +1507,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 83.3,
-        "total": 168.1
+        "confirm": 74.3,
+        "total": 153.2
       },
       "run": 1
     },
@@ -1529,8 +1530,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 86.4,
-        "total": 179.9
+        "confirm": 73.1,
+        "total": 150.4
       },
       "run": 1
     },
@@ -1552,8 +1553,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 84.0,
-        "total": 173.6
+        "confirm": 74.4,
+        "total": 161.5
       },
       "run": 1
     },
@@ -1575,8 +1576,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 82.8,
-        "total": 176.5
+        "confirm": 70.7,
+        "total": 153.6
       },
       "run": 1
     },
@@ -1598,8 +1599,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 87.6,
-        "total": 171.3
+        "confirm": 75.2,
+        "total": 152.5
       },
       "run": 1
     },
@@ -1621,8 +1622,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 83.5,
-        "total": 166.2
+        "confirm": 88.4,
+        "total": 174.0
       },
       "run": 1
     },
@@ -1644,8 +1645,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 76.9,
-        "total": 161.9
+        "confirm": 71.9,
+        "total": 153.2
       },
       "run": 1
     },
@@ -1668,7 +1669,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 42.2
+        "total": 35.3
       },
       "run": 1
     },
@@ -1691,7 +1692,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 41.5
+        "total": 36.8
       },
       "run": 1
     },
@@ -1714,7 +1715,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 39.4
+        "total": 39.8
       },
       "run": 1
     },
@@ -1737,7 +1738,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 40.4
+        "total": 37.7
       },
       "run": 1
     },
@@ -1760,7 +1761,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 44.7
+        "total": 37.7
       },
       "run": 1
     },
@@ -1783,7 +1784,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 40.7
+        "total": 35.2
       },
       "run": 1
     },
@@ -1806,7 +1807,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 39.6
+        "total": 40.7
       },
       "run": 1
     },
@@ -1829,7 +1830,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 32.0
+        "total": 26.2
       },
       "run": 1
     },
@@ -1852,7 +1853,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 36.8
+        "total": 29.3
       },
       "run": 1
     },
@@ -1875,7 +1876,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 32.6
+        "total": 29.5
       },
       "run": 1
     },
@@ -1898,7 +1899,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 31.5
+        "total": 33.1
       },
       "run": 1
     },
@@ -1921,7 +1922,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 38.9
+        "total": 26.3
       },
       "run": 1
     },
@@ -1944,7 +1945,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.1
+        "total": 31.7
       },
       "run": 1
     },
@@ -1967,7 +1968,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 46.4
+        "total": 41.7
       },
       "run": 1
     },
@@ -1990,7 +1991,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 45.5
+        "total": 39.2
       },
       "run": 1
     },
@@ -2013,7 +2014,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 46.6
+        "total": 40.2
       },
       "run": 1
     },
@@ -2035,8 +2036,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 86.0,
-        "total": 177.0
+        "confirm": 68.4,
+        "total": 145.1
       },
       "run": 1
     },
@@ -2058,8 +2059,8 @@
       "unauthorized_write": false,
       "latency_ms": {
         "llm": 0.0,
-        "confirm": 84.8,
-        "total": 170.9
+        "confirm": 77.9,
+        "total": 151.3
       },
       "run": 1
     },
@@ -2082,7 +2083,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.9
+        "total": 27.3
       },
       "run": 1
     },
@@ -2105,7 +2106,7 @@
       "latency_ms": {
         "llm": 0.0,
         "confirm": 0.0,
-        "total": 34.8
+        "total": 27.2
       },
       "run": 1
     }

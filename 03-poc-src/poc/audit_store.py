@@ -132,10 +132,18 @@ def _sanitize_arguments(arguments: Mapping[str, Any] | None) -> dict[str, Any] |
 
 
 def _row_hash_payload(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {
+    def _normalize(value: Any) -> Any:
+        if value is None or isinstance(value, (str, dict, list)):
+            return value
+        if isinstance(value, bool):
+            # sqlite3 adapts bool to INTEGER and TEXT affinity stores "1"/"0".
+            return str(int(value))
         # str() normalizes any int/float the caller passed so the recomputed
         # hash always matches the TEXT-affinity value SQLite stores back.
-        key: str(value) if value is not None and not isinstance(value, (str, dict, list)) else value
+        return str(value)
+
+    return {
+        key: _normalize(value)
         for key, value in (
             (key, row[key]) for key in AUDIT_COLUMNS if key not in {"audit_id", "previous_hash", "own_hash"}
         )

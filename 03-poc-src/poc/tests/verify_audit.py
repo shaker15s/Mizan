@@ -62,7 +62,16 @@ def main(argv: list[str] | None = None) -> int:
         if any(row.get(field) in (None, "") for field in _REQUIRED_FIELDS)
     ]
     serialized = json.dumps(rows, ensure_ascii=False, sort_keys=True)
-    leaked_secrets = [token for token in ("ODOO_API_KEY", "ANTHROPIC_API_KEY", "bearer ") if token.lower() in serialized.lower()]
+    import os
+
+    secret_patterns = ("ODOO_API_KEY", "ANTHROPIC_API_KEY", "bearer ", "sk-ant-", "ghp_", "AKIA")
+    leaked_secrets = [token for token in secret_patterns if token.lower() in serialized.lower()]
+    # Match actual configured key VALUES if the verifier runs on the operator box.
+    leaked_secrets += [
+        f"env-value:{name}"
+        for name, value in os.environ.items()
+        if name.startswith("ODOO_API_KEY") and value and value in serialized
+    ]
 
     report = {
         "db_path": str(db_path),
