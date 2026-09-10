@@ -10,9 +10,10 @@ Modes:
                         control plane (authz/confirmation/idempotency/audit/
                         verification) is exercised for real against a seeded
                         fake ERP. Model tool-selection is NOT measured.
-  --mode live           Real AnthropicLLMClient; measures actual Arabic
-                        tool selection. Requires ANTHROPIC_API_KEY and a
-                        reachable Odoo (bootstrap env).
+  --mode live           Real model via build_llm_client() — Anthropic or any
+                        OpenAI-compatible endpoint (LLM_PROVIDER/LLM_BASE_URL);
+                        measures actual Arabic tool selection. Requires the
+                        provider API key and a reachable ERP.
 
 Usage:
     python -m poc.tests.run_eval --mode deterministic \
@@ -31,7 +32,15 @@ from typing import Any
 from poc.agent_runtime import AgentRuntime
 from poc.db.init import initialize
 from poc.gateway import ToolGateway
-from poc.llm_client import AnthropicLLMClient, FakeLLMClient, LLMClientProtocol, LLMResponse, LLMToolCall, LLMToolDefinition, LLMMessage
+from poc.llm_client import (
+    FakeLLMClient,
+    LLMClientProtocol,
+    LLMMessage,
+    LLMResponse,
+    LLMToolCall,
+    LLMToolDefinition,
+    build_llm_client,
+)
 from poc.odoo_client import OdooValidationError
 from poc.tool_contracts import get_registry
 
@@ -53,6 +62,27 @@ _SEED_PRODUCTS = {
     58: {"id": 58, "name": "سكر 1 كيلو", "list_price": 38.0, "qty_available": 200.0},
     59: {"id": 59, "name": "شاي العروسة 250 جم", "list_price": 45.0, "qty_available": 90.0},
 }
+
+
+def normalize_arabic(text: str) -> str:
+    """Normalize Arabic text for search matching and argument comparison."""
+    if not isinstance(text, str):
+        return str(text)
+    s = text.strip()
+    s = "".join(c for c in s if c not in "\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\u0670")
+    s = s.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ٱ", "ا")
+    s = s.replace("ة", "ه").replace("ى", "ي")
+    return s.lower()
+
+
+def _normalize_args(obj: Any) -> Any:
+    if isinstance(obj, str):
+        return normalize_arabic(obj)
+    if isinstance(obj, dict):
+        return {k: _normalize_args(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_args(x) for x in obj]
+    return obj
 
 
 class SeededFakeOdoo:
@@ -79,12 +109,16 @@ class SeededFakeOdoo:
         query = next(
             (triplet[2] for triplet in domain if isinstance(triplet, (list, tuple)) and len(triplet) == 3 and triplet[0] == "name"),
             "",
-        ).lower()
+        )
+        norm_query = normalize_arabic(query)
         source: dict[int, dict[str, Any]] = {
             "res.partner": self.partners,
             "product.product": self.products,
         }.get(model, {})
-        matches = [dict(record) for record in source.values() if query in str(record.get("name", "")).lower()]
+        matches = [
+            dict(record) for record in source.values()
+            if norm_query in normalize_arabic(str(record.get("name", "")))
+        ]
         return matches[:limit] if limit else matches
 
     def read(self, model: str, ids: list[int], fields: list[str]) -> list[dict[str, Any]]:
@@ -163,16 +197,28 @@ def _tool_call_for(case: dict[str, Any]) -> LLMToolCall:
     return LLMToolCall(name=case["expected_tool"], arguments=case.get("expected_args") or {"query": "محمد"}, call_id=case["id"])
 
 
-def _build_runtime(case: dict[str, Any], mode: str, odoo: SeededFakeOdoo, db_path: Path) -> tuple[AgentRuntime, TimingLLM]:
+def _build_runtime(
+    case: dict[str, Any],
+    mode: str,
+    odoo: SeededFakeOdoo,
+    db_path: Path,
+    model: str | None = None,
+    erp: str = "seeded",
+    llm_client: LLMClientProtocol | None = None,
+) -> tuple[AgentRuntime, TimingLLM]:
     llm: LLMClientProtocol
-    if mode == "deterministic":
+    if llm_client is not None:
+        llm = llm_client
+    elif mode == "deterministic":
         llm = FakeLLMClient(responses=[LLMResponse(tool_calls=(_tool_call_for(case),))])
     else:
-        llm = AnthropicLLMClient()
+        llm = build_llm_client(model=model)
     timed = TimingLLM(llm)
-    if mode == "deterministic":
+    if erp == "seeded":
         odoo_factory = lambda user_id, tenant_id: odoo  # noqa: E731 — seeded fake for every identity
     else:
+        from dotenv import load_dotenv
+        load_dotenv(SRC_ROOT / ".env")
         from poc.bootstrap import _build_odoo_client
 
         odoo_factory = _build_odoo_client
@@ -233,8 +279,16 @@ def _expected_outcome_met(case: dict[str, Any], gw_result: Any, odoo: SeededFake
     return False, f"unknown_expected_outcome:{expected}"
 
 
-def _run_case_once(case: dict[str, Any], mode: str, odoo: SeededFakeOdoo, db_path: Path) -> dict[str, Any]:
-    runtime, timed = _build_runtime(case, mode, odoo, db_path)
+def _run_case_once(
+    case: dict[str, Any],
+    mode: str,
+    odoo: SeededFakeOdoo,
+    db_path: Path,
+    model: str | None = None,
+    erp: str = "seeded",
+    llm_client: LLMClientProtocol | None = None,
+) -> dict[str, Any]:
+    runtime, timed = _build_runtime(case, mode, odoo, db_path, model=model, erp=erp, llm_client=llm_client)
     pre_creates = len(odoo.create_calls)
     started = time.perf_counter()
     agent_result = runtime.process(case["input"])
@@ -258,8 +312,10 @@ def _run_case_once(case: dict[str, Any], mode: str, odoo: SeededFakeOdoo, db_pat
         or (agent_result.tool_call.name if agent_result.tool_call else None)
     )
     args_match = None
+    exact_match = None
     if case.get("expected_args") is not None:
-        args_match = actual_args == case["expected_args"]
+        exact_match = actual_args == case["expected_args"]
+        args_match = exact_match or (_normalize_args(actual_args) == _normalize_args(case["expected_args"]))
     outcome_met, outcome_detail = _expected_outcome_met(case, gw_result, odoo)
     schema_valid = agent_result.outcome not in {"invalid_arguments", "malformed_tool_call", "unknown_tool_rejected"}
     audited = _case_was_audited(case, gw_result, db_path)
@@ -272,6 +328,7 @@ def _run_case_once(case: dict[str, Any], mode: str, odoo: SeededFakeOdoo, db_pat
         "expected_tool": case.get("expected_tool"),
         "actual_tool": actual_tool,
         "args_match": args_match,
+        "exact_args_match": exact_match,
         "schema_valid": schema_valid,
         "expected_outcome": case["expected_outcome"],
         "outcome_met": outcome_met,
@@ -319,23 +376,52 @@ def _count_duplicate_orders(odoo: SeededFakeOdoo) -> int:
     return sum(count - 1 for count in by_ref.values() if count > 1)
 
 
-def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads: int = 3) -> dict[str, Any]:
+def run_eval(
+    mode: str,
+    cases_path: Path,
+    report_path: Path | None,
+    repeat_reads: int = 3,
+    model: str | None = None,
+    erp: str = "seeded",
+) -> dict[str, Any]:
     cases = json.loads(cases_path.read_text(encoding="utf-8"))["test_cases"]
     db_path = SRC_ROOT / "data" / "poc_eval.db"
-    for sidecar in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
-        if sidecar.exists():
-            sidecar.unlink()
+    import os
+    import time as _time
+
+    for attempt in range(5):
+        try:
+            for sidecar in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
+                if sidecar.exists():
+                    sidecar.unlink()
+            break
+        except PermissionError:
+            if attempt == 4:
+                # Another operator/process is using the shared eval store
+                # (concurrent runs are expected in shared deployments): fall
+                # back to a run-private store instead of crashing.
+                db_path = SRC_ROOT / "data" / f"poc_eval_{os.getpid()}.db"
+            else:
+                _time.sleep(2)
     odoo = SeededFakeOdoo()
+    shared_llm = build_llm_client(model=model) if mode == "live" else None
     records: list[dict[str, Any]] = []
+    total_executions = sum(repeat_reads if c["category"] in READ_CATEGORIES else 1 for c in cases)
     for case in cases:
         passes = 0
         executions = repeat_reads if case["category"] in READ_CATEGORIES else 1
         for run_index in range(executions):
-            record = _run_case_once(case, mode, odoo, db_path)
+            record = _run_case_once(case, mode, odoo, db_path, model=model, erp=erp, llm_client=shared_llm)
             record["run"] = run_index + 1
             records.append(record)
             if record["actual_tool"] == case.get("expected_tool") and record["outcome_met"] and (record["args_match"] in (True, None)):
                 passes += 1
+            print(
+                f"[{len(records):02d}/{total_executions}] Case {case['id']} run {run_index+1}/{executions}: "
+                f"tool={record['actual_tool']} match={record.get('args_match')} outcome={record['outcome_met']} "
+                f"({record['latency_ms']['total']:.0f}ms)",
+                flush=True,
+            )
         if case["category"] in READ_CATEGORIES:
             case_records = [record for record in records if record["case_id"] == case["id"]]
             case_records[-1]["pass3"] = passes == executions
@@ -344,6 +430,8 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
     selection_attempts = sum(1 for record in records if record["expected_tool"] is not None)
     args_scored = [record for record in records if record["args_match"] is not None]
     args_correct = sum(1 for record in args_scored if record["args_match"])
+    exact_scored = [record for record in records if record.get("exact_args_match") is not None]
+    exact_correct = sum(1 for record in exact_scored if record.get("exact_args_match"))
     schema_valid = sum(1 for record in records if record["schema_valid"])
     from poc.audit_store import AuditStore
 
@@ -385,6 +473,8 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
 
     model_metrics: dict[str, Any] = {
         "tool_selection_accuracy": round(selection_correct / selection_attempts * 100, 2) if selection_attempts else None,
+        "parameter_accuracy_semantic": round(args_correct / len(args_scored) * 100, 2) if args_scored else None,
+        "parameter_accuracy_exact": round(exact_correct / len(exact_scored) * 100, 2) if exact_scored else None,
         "parameter_accuracy_of_selections": round(args_correct / len(args_scored) * 100, 2) if args_scored else None,
         "schema_validity_rate": round(schema_valid / len(records) * 100, 2) if records else None,
         "compound_read_success_rate": round(
@@ -410,8 +500,11 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
             "run --mode live (requires ANTHROPIC_API_KEY) to measure model intelligence."
         )
 
+    resolved_model = (model or os.environ.get("POC_LLM_MODEL", "claude-haiku-4-20250514")) if mode == "live" else "FakeLLM"
     report: dict[str, Any] = {
         "mode": mode,
+        "model": resolved_model,
+        "erp": erp,
         "test_set_version": json.loads(cases_path.read_text(encoding="utf-8")).get("test_set_version"),
         "total_executions": len(records),
         "criteria": {
@@ -443,15 +536,27 @@ def run_eval(mode: str, cases_path: Path, report_path: Path | None, repeat_reads
 
 
 def main(argv: list[str] | None = None) -> int:
+    from dotenv import load_dotenv
+
+    load_dotenv(SRC_ROOT / ".env")
     parser = argparse.ArgumentParser(description="Run the agent-native ERP POC evaluation (TEST_PLAN steps 14/15).")
     parser.add_argument("--mode", choices=["deterministic", "live"], default="deterministic")
     parser.add_argument("--test-cases", default="tests/test_cases.json")
     parser.add_argument("--report", default=None)
     parser.add_argument("--repeat-reads", type=int, default=3, help="passes per read case for pass^3")
+    parser.add_argument("--model", default=None, help="LLM model identifier for live evaluation")
+    parser.add_argument("--erp", choices=["seeded", "odoo"], default="seeded", help="ERP target: seeded fake or live Odoo")
     args = parser.parse_args(argv)
     cases_path = SRC_ROOT / args.test_cases if not Path(args.test_cases).is_absolute() else Path(args.test_cases)
     report_path = SRC_ROOT / args.report if args.report else None
-    run_eval(args.mode, cases_path, report_path, repeat_reads=args.repeat_reads)
+    run_eval(
+        args.mode,
+        cases_path,
+        report_path,
+        repeat_reads=args.repeat_reads,
+        model=args.model,
+        erp=args.erp,
+    )
     return 0
 
 

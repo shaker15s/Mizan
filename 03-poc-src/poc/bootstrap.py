@@ -12,7 +12,7 @@ from poc.agent_runtime import AgentRuntime
 from poc.authz import PolicyEngine
 from poc.db.init import DEFAULT_DB_PATH, initialize
 from poc.gateway import ToolGateway
-from poc.llm_client import AnthropicLLMClient, LLMClientProtocol
+from poc.llm_client import LLMClientProtocol, build_llm_client
 from poc.odoo_client import OdooConfig, OdooJSON2Client
 from poc.tool_contracts import get_registry
 
@@ -67,7 +67,7 @@ def build_runtime(
     initialize(db_path)
     resolved_factory = odoo_client_factory or _build_odoo_client
     return AgentRuntime(
-        llm_client=llm_client or AnthropicLLMClient(),
+        llm_client=llm_client or build_llm_client(),
         gateway=ToolGateway(
             registry=get_registry(),
             policy_engine=PolicyEngine(),
