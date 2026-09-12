@@ -23,6 +23,7 @@ from typing import Any, Mapping
 from poc.agent_runtime import AgentResult, AgentRuntime, CONFIRMATION_REQUIRED, CONFIRMED_EXECUTION
 from poc.bootstrap import build_runtime
 from poc.main import _build_payload
+from poc.odoo_client import get_circuit_breaker
 from poc.tool_contracts import get_registry
 
 LOGGER = logging.getLogger("erp.web_server")
@@ -188,10 +189,15 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         llm_model = os.environ.get("POC_LLM_MODEL", "claude-haiku-4-20250514")
         base_url = os.environ.get("ANTHROPIC_BASE_URL", "http://127.0.0.1:8082")
+        uptime_secs = int(time.time() - getattr(self.server, "start_time", time.time()))
+        cb_status = get_circuit_breaker().get_status()
 
         self._send_json(200, {
             "success": True,
             "status": "online",
+            "uptime_seconds": uptime_secs,
+            "uptime_human": f"{uptime_secs // 60}m {uptime_secs % 60}s",
+            "circuit_breaker": cb_status,
             "odoo": {
                 "online": odoo_online,
                 "url": odoo_url,
@@ -208,6 +214,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "role": "R1_SALES (Full Sales Operator)",
                 "idempotency_enforced": True,
                 "zero_direct_credentials": True,
+                "sqlite_wal_mode": True,
             },
         })
 

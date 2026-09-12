@@ -29,6 +29,60 @@ class OdooConnectionError(OdooClientError):
     """The Odoo server could not be reached."""
 
 
+class CircuitBreakerOpenError(OdooConnectionError):
+    """Raised when the circuit breaker is open due to recent repeated failures."""
+
+
+class CircuitBreaker:
+    """Enterprise-grade Circuit Breaker protecting Odoo and the Gateway."""
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 30.0) -> None:
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+
+    def record_success(self) -> None:
+        self.failure_count = 0
+        self.state = "CLOSED"
+
+    def record_failure(self) -> None:
+        import time
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+
+    def can_execute(self) -> bool:
+        import time
+        if self.state == "CLOSED":
+            return True
+        if self.state == "OPEN":
+            if (time.time() - self.last_failure_time) >= self.recovery_timeout:
+                self.state = "HALF_OPEN"
+                return True
+            return False
+        if self.state == "HALF_OPEN":
+            return True
+        return True
+
+    def get_status(self) -> dict[str, Any]:
+        return {
+            "state": self.state,
+            "failure_count": self.failure_count,
+            "threshold": self.failure_threshold,
+            "healthy": self.state == "CLOSED",
+        }
+
+
+_GLOBAL_CIRCUIT_BREAKER = CircuitBreaker()
+
+
+def get_circuit_breaker() -> CircuitBreaker:
+    return _GLOBAL_CIRCUIT_BREAKER
+
+
 class OdooTimeoutError(OdooConnectionError):
     """Odoo did not respond within the configured timeout."""
 
@@ -138,15 +192,27 @@ def _parse_json_response(response: httpx.Response) -> Any:
 class OdooJSON2Client:
     """Synchronous client exposing only the JSON-2 primitives used by the POC."""
 
-    def __init__(self, config: OdooConfig) -> None:
+    def __init__(self, config: OdooConfig, circuit_breaker: CircuitBreaker | None = None) -> None:
         if not config.url or not config.database or not config.api_key:
             raise ValueError("OdooConfig requires url, database, and api_key.")
         self._base_url = config.url.rstrip("/")
         self._database = config.database
         self._api_key = config.api_key
         self._timeout_seconds = config.timeout_seconds
+        self._circuit_breaker = circuit_breaker or get_circuit_breaker()
+
+    @property
+    def circuit_breaker(self) -> CircuitBreaker:
+        return self._circuit_breaker
 
     def _post(self, model: str, method: str, payload: dict[str, Any]) -> Any:
+        if not self._circuit_breaker.can_execute():
+            raise CircuitBreakerOpenError(
+                "circuit_open",
+                f"Odoo Circuit Breaker is OPEN ({self._circuit_breaker.failure_count} consecutive failures). Request rejected to prevent cascading latency.",
+                503,
+            )
+
         url = f"{self._base_url}/json/2/{model}/{method}"
         headers = {
             "Authorization": f"bearer {self._api_key}",
@@ -156,12 +222,19 @@ class OdooJSON2Client:
         try:
             response = httpx.post(url, json=payload, headers=headers, timeout=self._timeout_seconds)
         except httpx.TimeoutException as error:
+            self._circuit_breaker.record_failure()
             raise OdooTimeoutError("timeout", "The Odoo request timed out.", None) from error
         except httpx.HTTPError as error:
+            self._circuit_breaker.record_failure()
             raise OdooConnectionError("connection_error", "Could not reach the Odoo server.", None) from error
 
         body = _parse_json_response(response)
-        _raise_for_status(response.status_code, body)
+        try:
+            _raise_for_status(response.status_code, body)
+            self._circuit_breaker.record_success()
+        except (OdooServerError, OdooConnectionError):
+            self._circuit_breaker.record_failure()
+            raise
         return body
 
     def search_read(

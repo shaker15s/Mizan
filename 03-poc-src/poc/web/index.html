@@ -137,17 +137,20 @@
       <!-- Quick Suggestion Action Chips -->
       <div class="px-4 py-2 border-t border-slate-100 bg-slate-50/70 overflow-x-auto flex items-center gap-2 text-xs">
         <span class="text-slate-400 font-semibold shrink-0 text-[11px]">اقتراحات سريعة:</span>
-        <button onclick="sendQuickPrompt('هات مبيعات آخر أسبوع لفرع المعادي')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
-          📊 مبيعات المعادي
+        <button onclick="sendQuickPrompt('اعمل طلب بيع للعميل 42 لعدد 15 من المنتج 55')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          🛒 أمر بيع للعميل 42 (15 مياه)
         </button>
-        <button onclick="sendQuickPrompt('اعمل طلب بيع للعميل 42 لعدد 20 من المنتج 55')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
-          🛒 أمر بيع للعميل 42 (20 مياه)
+        <button onclick="sendQuickPrompt('فحص قائمة المنتجات والأسعار والمخزون المتاح')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          📦 فحص المخزون والأسعار
         </button>
         <button onclick="sendQuickPrompt('ابحث عن العميل محمد أحمد')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
           🔍 استعلام عن محمد أحمد
         </button>
-        <button onclick="sendQuickPrompt('اعمل طلب بيع لأحمد حسن بـ 5 زيت عباد الشمس')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
-          🛒 طلب لأحمد حسن (5 زيت)
+        <button onclick="sendQuickPrompt('هات تفاصيل الأوردر رقم 100')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          📄 تتبع الأوردر 100
+        </button>
+        <button onclick="sendQuickPrompt('ابحث عن شركة النيل للتجارة')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          🏢 شركة النيل للتجارة
         </button>
       </div>
 
@@ -249,12 +252,20 @@
             <span class="font-mono text-slate-800 font-bold" id="odoo-db-label">localhost:8069 (poc_test)</span>
           </div>
           <div class="flex justify-between">
+            <span class="text-slate-500">قاطع الدائرة (Circuit Breaker):</span>
+            <span class="font-mono text-emerald-700 font-bold text-[11px]" id="cb-badge">CLOSED (HEALTHY)</span>
+          </div>
+          <div class="flex justify-between">
             <span class="text-slate-500">مزود الذكاء الاصطناعي:</span>
             <span class="font-mono text-blue-700 font-semibold" id="model-label">claude-haiku via FreeCC</span>
           </div>
           <div class="flex justify-between">
+            <span class="text-slate-500">زمن تشغيل الخادم (Uptime):</span>
+            <span class="font-mono text-slate-700 text-[11px]" id="uptime-label">0m 0s</span>
+          </div>
+          <div class="flex justify-between">
             <span class="text-slate-500">قاعدة بيانات البوابة:</span>
-            <span class="font-mono text-slate-700 text-[11px]">data/poc_gateway.db (SQLite)</span>
+            <span class="font-mono text-slate-700 text-[11px]">data/poc_gateway.db (WAL Active)</span>
           </div>
           <div class="flex justify-between border-t border-slate-100 pt-1.5">
             <span class="text-slate-500">حماية عدم التكرار (Idempotency):</span>

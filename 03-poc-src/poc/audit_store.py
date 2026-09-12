@@ -166,12 +166,19 @@ class AuditStore:
         """Create the store idempotently without deleting or replacing data."""
         return initialize(self.db_path)
 
+    def _connect(self) -> sqlite3.Connection:
+        """Create a resilient connection configured for high-concurrency WAL mode."""
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
+
     def append(self, record: Mapping[str, Any]) -> dict[str, Any]:
         """Validate, hash, and transactionally append one audit record."""
         if not isinstance(record, dict):
             raise TypeError("record must be a mapping")
 
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
             previous_hash = self._last_own_hash(conn)
@@ -196,7 +203,7 @@ class AuditStore:
         """Return one structured audit record by database ID."""
         if isinstance(audit_id, bool) or not isinstance(audit_id, int) or audit_id < 1:
             raise ValueError("audit_id must be a positive integer")
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute(
@@ -226,7 +233,7 @@ class AuditStore:
             params.append(request_id)
         sql += " ORDER BY audit_id LIMIT ? OFFSET ?"
         params.extend([limit, offset])
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(sql, params).fetchall()
@@ -236,7 +243,7 @@ class AuditStore:
 
     def verify_chain(self) -> dict[str, Any]:
         """Verify every stored row and its predecessor linkage."""
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute("SELECT * FROM audit_log ORDER BY audit_id").fetchall()

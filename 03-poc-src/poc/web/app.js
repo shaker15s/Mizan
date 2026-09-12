@@ -58,6 +58,22 @@ async function fetchTelemetry() {
     if (modelLabel && data.model) {
       modelLabel.textContent = `${data.model.name} (${data.model.provider})`;
     }
+
+    const cbBadge = document.getElementById('cb-badge');
+    if (cbBadge && data.circuit_breaker) {
+      if (data.circuit_breaker.healthy) {
+        cbBadge.textContent = 'CLOSED (HEALTHY)';
+        cbBadge.className = 'font-mono text-emerald-700 font-bold text-[11px]';
+      } else {
+        cbBadge.textContent = `${data.circuit_breaker.state} (TRIPPED)`;
+        cbBadge.className = 'font-mono text-rose-700 font-bold text-[11px] animate-pulse';
+      }
+    }
+
+    const uptimeLabel = document.getElementById('uptime-label');
+    if (uptimeLabel && data.uptime_human) {
+      uptimeLabel.textContent = data.uptime_human;
+    }
   } catch (err) {
     console.warn('Telemetry fetch error:', err);
   }
@@ -537,12 +553,72 @@ async function declineProposal(proposalId) {
   }
 }
 
+// --- EXPORT & COPY UTILITIES (THE CONSORTIUM ENHANCEMENTS) ---
+
+function downloadCSV(csvContent, filename) {
+  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function exportResultToCSV(resultKey) {
+  const result = window._resultsStore?.[resultKey];
+  if (!result) return;
+  if (result.customers) {
+    let csv = "ID,Name,Phone,Email,Street,Credit Limit\n";
+    result.customers.forEach(c => {
+      csv += `"${c.id || ''}","${(c.name || '').replace(/"/g, '""')}","${c.phone || ''}","${c.email || ''}","${[c.street, c.city].filter(Boolean).join(' ').replace(/"/g, '""')}","${c.credit_limit || 0}"\n`;
+    });
+    downloadCSV(csv, `odoo_customers_${Date.now()}.csv`);
+  } else if (result.products) {
+    let csv = "ID,Name,Default Code,Price EGP,Qty Available\n";
+    result.products.forEach(p => {
+      csv += `"${p.id || ''}","${(p.name || '').replace(/"/g, '""')}","${p.default_code || ''}","${p.list_price || 0}","${p.qty_available || 0}"\n`;
+    });
+    downloadCSV(csv, `odoo_products_${Date.now()}.csv`);
+  } else if (result.order) {
+    const o = result.order;
+    let csv = "Order,Partner,State,Amount Total EGP\n";
+    csv += `"${o.name || ''}","${o.partner_name || o.partner_id || ''}","${o.state || ''}","${o.amount_total || 0}"\n\n`;
+    csv += "Product,Qty,Price Unit\n";
+    (o.order_lines || []).forEach(l => {
+      csv += `"${(l.product_name || l.name || l.product_id || '').replace(/"/g, '""')}","${l.product_uom_qty || l.qty || 1}","${l.price_unit || 0}"\n`;
+    });
+    downloadCSV(csv, `odoo_order_${o.name || Date.now()}.csv`);
+  }
+}
+
+function copyResultSummary(btnId, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="text-emerald-700 font-bold">تم النسخ ✓</span>';
+      setTimeout(() => {
+        btn.innerHTML = original;
+      }, 2000);
+    }
+  }).catch(() => {
+    alert('تم نسخ الملخص: ' + text);
+  });
+}
+
 // --- DATA RESULTS WIDGET (READ OPERATIONS) ---
 
 function renderDataResultCard(result, responseAr) {
   const container = document.getElementById('chat-messages');
+  const cardId = 'result-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+  window._resultsStore = window._resultsStore || {};
+  window._resultsStore[cardId] = result;
+
   const card = document.createElement('div');
   card.className = 'hairline-card rounded-2xl p-4 my-3 bg-gradient-card space-y-3 fade-in data-card-hover border border-slate-200';
+  card.id = cardId;
 
   let contentHtml = '';
 
@@ -608,6 +684,9 @@ function renderDataResultCard(result, responseAr) {
                   ${stockIcon} ${p.qty_available || 0}
                 </span>
               </div>
+              <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden" title="عمق المخزون المتاح">
+                <div class="${p.qty_available > 10 ? 'bg-emerald-500' : p.qty_available > 0 ? 'bg-amber-500' : 'bg-rose-500'} h-1.5 rounded-full transition-all duration-500" style="width: ${Math.min(100, Math.max(8, (p.qty_available / 30) * 100))}%"></div>
+              </div>
             </div>
           </div>
         `}).join('')}
@@ -648,7 +727,7 @@ function renderDataResultCard(result, responseAr) {
     `;
   } else if (result.order) {
     const o = result.order;
-    const stateMap = { 'draft': 'مسودة', 'sale': 'مؤكد', 'cancel': 'ملغي' };
+    const stateMap = { 'draft': 'مسودة', 'sale': 'مؤكد', 'cancel': 'ملغي', 'done': 'منتهي' };
     const stateColor = o.state === 'sale' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
                        o.state === 'cancel' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
                        'bg-slate-100 text-slate-700 border-slate-200';
@@ -656,7 +735,7 @@ function renderDataResultCard(result, responseAr) {
     const lines = o.order_lines || [];
     
     contentHtml = `
-      <div class="bg-white rounded-xl border border-slate-200 mt-2 overflow-hidden">
+      <div class="bg-white rounded-xl border border-slate-200 mt-2 overflow-hidden shadow-2xs">
         <div class="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
           <div class="flex items-center gap-2">
             <span class="text-lg">📄</span>
@@ -668,6 +747,18 @@ function renderDataResultCard(result, responseAr) {
           <span class="px-2 py-1 rounded text-[10px] font-bold border ${stateColor}">
             ${stateMap[o.state] || o.state}
           </span>
+        </div>
+
+        <!-- Order Stage Progression Bar -->
+        <div class="px-3 pt-2.5 pb-2 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between text-[11px] font-mono">
+          <div class="flex items-center gap-1.5">
+            <span class="px-2 py-0.5 rounded-md ${o.state === 'draft' ? 'bg-blue-600 text-white font-bold shadow-2xs' : 'bg-slate-200 text-slate-600'}">1. مسودة</span>
+            <span class="text-slate-400 font-bold">➔</span>
+            <span class="px-2 py-0.5 rounded-md ${o.state === 'sale' ? 'bg-emerald-600 text-white font-bold shadow-2xs' : 'bg-slate-200 text-slate-600'}">2. مؤكد</span>
+            <span class="text-slate-400 font-bold">➔</span>
+            <span class="px-2 py-0.5 rounded-md ${o.state === 'done' ? 'bg-indigo-600 text-white font-bold shadow-2xs' : 'bg-slate-200 text-slate-600'}">3. منتهي</span>
+          </div>
+          <span class="text-slate-400 font-data text-[10px]">مرحلة الأوردر</span>
         </div>
         
         <div class="p-3 text-xs font-data">
@@ -714,15 +805,30 @@ function renderDataResultCard(result, responseAr) {
     `;
   }
 
+  const hasExportableData = Boolean(result.customers || result.products || result.order);
+  const copyBtnId = `copy-btn-${cardId}`;
+
   card.innerHTML = `
-    <div class="flex items-center justify-between mb-2">
-      <span class="text-xs font-bold text-blue-700 flex items-center gap-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-        تقرير استعلام Odoo 19
-      </span>
-      <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold tracking-wider">READ_VERIFIED</span>
+    <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-blue-700 flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+          تقرير استعلام Odoo 19
+        </span>
+        <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold tracking-wider">READ_VERIFIED</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        ${hasExportableData ? `
+          <button onclick="exportResultToCSV('${cardId}')" title="تصدير جدول البيانات كملف CSV" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-data font-semibold flex items-center gap-1 transition shadow-2xs">
+            <span>📥 تصدير CSV</span>
+          </button>
+        ` : ''}
+        <button id="${copyBtnId}" onclick="copyResultSummary('${copyBtnId}', \`${(responseAr || '').replace(/[`\\]/g, '')}\`)" title="نسخ نص التقرير للحافظة" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-data font-semibold flex items-center gap-1 transition shadow-2xs">
+          <span>📋 نسخ</span>
+        </button>
+      </div>
     </div>
-    ${responseAr ? `<p class="text-[13px] text-slate-700 font-data leading-relaxed bg-blue-50/50 p-2 rounded-lg border border-blue-100/50">${responseAr}</p>` : ''}
+    ${responseAr ? `<p class="text-[13px] text-slate-700 font-data leading-relaxed bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50 mb-2">${responseAr}</p>` : ''}
     ${contentHtml}
   `;
 
