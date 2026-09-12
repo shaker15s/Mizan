@@ -148,3 +148,58 @@ body {
   color: #047857;
   border: 1px solid #a7f3d0;
 }
+
+/* Fade in animation for chat messages */
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Better hover effects on data cards */
+.data-card-hover {
+  transition: all 0.2s ease;
+}
+.data-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(15, 23, 42, 0.08);
+  border-color: #94a3b8;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite linear;
+  border-radius: 4px;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Professional gradient backgrounds for result cards */
+.bg-gradient-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.bg-gradient-header {
+  background: linear-gradient(90deg, #f8fafc 0%, #ffffff 100%);
+}
+
+/* Better focus states on input field */
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: #3b82f6 !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Transition animations for pipeline steps */
+.w-5.h-5.rounded-full {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

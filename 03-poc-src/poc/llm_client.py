@@ -15,7 +15,7 @@ from typing import Any, Mapping, Protocol
 import httpx
 
 DEFAULT_MODEL = os.environ.get("POC_LLM_MODEL", "claude-sonnet-4-5-20250929")
-DEFAULT_MAX_TOKENS = 1024
+DEFAULT_MAX_TOKENS = 4096
 
 
 class LLMProviderError(RuntimeError):

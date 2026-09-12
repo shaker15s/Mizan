@@ -4,6 +4,12 @@
  * pipeline animation, and cryptographic audit ledger.
  */
 
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Global application state
 const state = {
   activeProposal: null,
@@ -208,7 +214,7 @@ function resetPipeline() {
 function appendMessage(sender, text, isUser = false) {
   const container = document.getElementById('chat-messages');
   const msgEl = document.createElement('div');
-  msgEl.className = `flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`;
+  msgEl.className = `flex items-start gap-3 fade-in ${isUser ? 'flex-row-reverse' : ''}`;
 
   const avatar = isUser
     ? '<div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">أنت</div>'
@@ -216,12 +222,17 @@ function appendMessage(sender, text, isUser = false) {
 
   const bubbleClass = isUser
     ? 'bg-blue-600 text-white rounded-2xl rounded-tl-none px-4 py-3 shadow-xs text-sm font-data max-w-[85%]'
-    : 'bg-slate-100 text-slate-800 rounded-2xl rounded-tr-none px-4 py-3 shadow-xs text-sm font-data max-w-[85%] space-y-1';
+    : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tr-none px-4 py-3 shadow-sm text-sm font-data max-w-[85%] space-y-1';
+
+  let safeText = isUser ? escapeHtml(text || '') : (text || '');
+  let formattedText = safeText
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
 
   msgEl.innerHTML = `
     ${avatar}
     <div class="${bubbleClass}">
-      <p class="leading-relaxed">${text}</p>
+      <p class="leading-relaxed whitespace-pre-wrap text-right" dir="rtl">${formattedText}</p>
       <span class="text-[10px] opacity-70 block mt-1 font-mono text-left" dir="ltr">${new Date().toLocaleTimeString('ar-EG')}</span>
     </div>
   `;
@@ -261,15 +272,15 @@ async function handleChatSubmit(e) {
   // Add Thinking Placeholder
   const container = document.getElementById('chat-messages');
   const thinkingEl = document.createElement('div');
-  thinkingEl.className = 'flex items-start gap-3';
+  thinkingEl.className = 'flex items-start gap-3 fade-in';
   thinkingEl.id = 'thinking-indicator';
   thinkingEl.innerHTML = `
     <div class="w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-bold shrink-0">ERP</div>
-    <div class="bg-slate-100 text-slate-500 rounded-2xl rounded-tr-none px-4 py-3 shadow-xs text-xs font-data flex items-center gap-2">
-      <span class="inline-block w-2 h-2 rounded-full bg-blue-600 animate-bounce"></span>
-      <span class="inline-block w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.2s]"></span>
-      <span class="inline-block w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.4s]"></span>
-      <span>جاري الفحص والمعالجة عبر البوابة المحمية...</span>
+    <div class="bg-white border border-slate-200 text-slate-500 rounded-2xl rounded-tr-none px-4 py-3 shadow-sm text-xs font-data flex items-center gap-2">
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce"></span>
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style="animation-delay: 0.15s"></span>
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style="animation-delay: 0.3s"></span>
+      <span class="ml-1 skeleton px-2 py-0.5 rounded text-transparent">جاري الفحص والمعالجة...</span>
     </div>
   `;
   container.appendChild(thinkingEl);
@@ -531,57 +542,187 @@ async function declineProposal(proposalId) {
 function renderDataResultCard(result, responseAr) {
   const container = document.getElementById('chat-messages');
   const card = document.createElement('div');
-  card.className = 'hairline-card rounded-2xl p-4 my-3 bg-white space-y-3';
+  card.className = 'hairline-card rounded-2xl p-4 my-3 bg-gradient-card space-y-3 fade-in data-card-hover border border-slate-200';
 
   let contentHtml = '';
 
   if (result.customers && Array.isArray(result.customers)) {
     contentHtml = `
-      <div class="text-xs font-bold text-slate-900 flex items-center justify-between border-b pb-2 border-slate-100">
-        <span>نتائج البحث في العملاء</span>
-        <span class="text-blue-700 font-mono text-[11px]">${result.customers.length} عملاء</span>
+      <div class="text-xs font-bold text-slate-900 flex items-center justify-between border-b pb-2 border-slate-200">
+        <span class="flex items-center gap-1">👥 <span class="text-slate-800">نتائج البحث في العملاء</span></span>
+        <span class="text-blue-700 font-mono text-[11px] bg-blue-50 px-2 py-0.5 rounded-full">${result.customers.length} عملاء</span>
       </div>
-      <div class="space-y-1.5 text-xs font-data">
-        ${result.customers.map(c => `
-          <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-            <span class="font-bold text-slate-800">${c.name}</span>
-            <span class="font-mono text-slate-500 text-[11px]">ID #${c.id}</span>
-          </div>
-        `).join('')}
+      <div class="overflow-x-auto mt-2">
+        <table class="w-full text-xs font-data text-right" dir="rtl">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500">
+              <th class="py-2 px-2 font-semibold">الاسم</th>
+              <th class="py-2 px-2 font-semibold">📞 الهاتف</th>
+              <th class="py-2 px-2 font-semibold">✉️ البريد</th>
+              <th class="py-2 px-2 font-semibold">📍 العنوان</th>
+              <th class="py-2 px-2 font-semibold text-left">💳 الحد الائتماني</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${result.customers.map(c => `
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="py-2 px-2 font-bold text-slate-800">${c.name || '---'}</td>
+                <td class="py-2 px-2" dir="ltr"><span class="text-slate-600">${c.phone || '---'}</span></td>
+                <td class="py-2 px-2 text-blue-600">${c.email || '---'}</td>
+                <td class="py-2 px-2 text-slate-600">${[c.street, c.city].filter(Boolean).join('، ') || '---'}</td>
+                <td class="py-2 px-2 text-left font-mono font-semibold ${c.credit_limit > 0 ? 'text-emerald-600' : 'text-slate-400'}">
+                  ${c.credit_limit ? c.credit_limit.toLocaleString() + ' EGP' : '---'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
     `;
   } else if (result.products && Array.isArray(result.products)) {
     contentHtml = `
-      <div class="text-xs font-bold text-slate-900 flex items-center justify-between border-b pb-2 border-slate-100">
-        <span>نتائج المخزون والمنتجات</span>
-        <span class="text-blue-700 font-mono text-[11px]">${result.products.length} منتج</span>
+      <div class="text-xs font-bold text-slate-900 flex items-center justify-between border-b pb-2 border-slate-200">
+        <span class="flex items-center gap-1">📦 <span class="text-slate-800">نتائج المخزون والمنتجات</span></span>
+        <span class="text-blue-700 font-mono text-[11px] bg-blue-50 px-2 py-0.5 rounded-full">${result.products.length} منتج</span>
       </div>
-      <div class="space-y-1.5 text-xs font-data">
-        ${result.products.map(p => `
-          <div class="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-100">
-            <div>
-              <div class="font-bold text-slate-800">${p.name}</div>
-              <div class="text-[10px] text-slate-500">سعر الوحدة: EGP ${p.list_price || 0}</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        ${result.products.map(p => {
+          let stockClass = 'bg-rose-50 text-rose-700 border-rose-200';
+          let stockIcon = '🔴';
+          if (p.qty_available > 10) { stockClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'; stockIcon = '🟢'; }
+          else if (p.qty_available > 0) { stockClass = 'bg-amber-50 text-amber-700 border-amber-200'; stockIcon = '🟡'; }
+          
+          return `
+          <div class="flex gap-3 p-3 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+            <div class="w-12 h-12 bg-slate-100 rounded-lg flex-shrink-0 flex items-center justify-center border border-slate-200">
+              <span class="text-xl opacity-50">🖼️</span>
             </div>
-            <span class="font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[11px]">متاح: ${p.qty_available || 0}</span>
+            <div class="flex-1 min-w-0 flex flex-col justify-between">
+              <div class="flex justify-between items-start">
+                <div class="font-bold text-slate-800 truncate" title="${p.name}">${p.name}</div>
+                <span class="font-mono text-[10px] text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100">${p.default_code || 'N/A'}</span>
+              </div>
+              <div class="flex justify-between items-center mt-2">
+                <div class="font-mono font-bold text-blue-700 text-sm">EGP ${(p.list_price || 0).toLocaleString()}</div>
+                <span class="font-mono px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${stockClass}">
+                  ${stockIcon} ${p.qty_available || 0}
+                </span>
+              </div>
+            </div>
           </div>
-        `).join('')}
+        `}).join('')}
+      </div>
+    `;
+  } else if (result.customer) {
+    const c = result.customer;
+    contentHtml = `
+      <div class="bg-gradient-header rounded-xl p-4 border border-slate-200 mt-2">
+        <div class="flex items-center gap-3 border-b border-slate-200 pb-3 mb-3">
+          <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-lg shadow-sm">👤</div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">${c.name}</h3>
+            <span class="text-xs text-slate-500 font-mono">ID #${c.id}</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4 text-xs font-data">
+          <div class="space-y-1">
+            <div class="text-slate-400">الهاتف:</div>
+            <div class="font-bold text-slate-800" dir="ltr">${c.phone || '---'}</div>
+          </div>
+          <div class="space-y-1">
+            <div class="text-slate-400">البريد الإلكتروني:</div>
+            <div class="font-bold text-blue-600">${c.email || '---'}</div>
+          </div>
+          <div class="space-y-1">
+            <div class="text-slate-400">العنوان:</div>
+            <div class="font-bold text-slate-800">${[c.street, c.city].filter(Boolean).join('، ') || '---'}</div>
+          </div>
+          <div class="space-y-1">
+            <div class="text-slate-400">الحد الائتماني:</div>
+            <div class="font-bold font-mono ${c.credit_limit > 0 ? 'text-emerald-600' : 'text-slate-700'}">
+              ${c.credit_limit ? c.credit_limit.toLocaleString() + ' EGP' : '0 EGP'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (result.order) {
+    const o = result.order;
+    const stateMap = { 'draft': 'مسودة', 'sale': 'مؤكد', 'cancel': 'ملغي' };
+    const stateColor = o.state === 'sale' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                       o.state === 'cancel' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
+                       'bg-slate-100 text-slate-700 border-slate-200';
+    
+    const lines = o.order_lines || [];
+    
+    contentHtml = `
+      <div class="bg-white rounded-xl border border-slate-200 mt-2 overflow-hidden">
+        <div class="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📄</span>
+            <div>
+              <div class="font-bold text-slate-900">${o.name || 'أمر بيع'}</div>
+              <div class="text-[10px] text-slate-500 font-mono">${new Date(o.date_order || Date.now()).toLocaleDateString('ar-EG')}</div>
+            </div>
+          </div>
+          <span class="px-2 py-1 rounded text-[10px] font-bold border ${stateColor}">
+            ${stateMap[o.state] || o.state}
+          </span>
+        </div>
+        
+        <div class="p-3 text-xs font-data">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-slate-500">العميل:</span>
+            <span class="font-bold text-slate-800">${o.partner_name || o.partner_id || '---'}</span>
+          </div>
+          
+          <div class="border border-slate-100 rounded-lg overflow-hidden">
+            <table class="w-full text-right">
+              <thead class="bg-slate-50 text-slate-500 text-[10px]">
+                <tr>
+                  <th class="py-1.5 px-2 font-semibold">المنتج</th>
+                  <th class="py-1.5 px-2 font-semibold text-center">الكمية</th>
+                  <th class="py-1.5 px-2 font-semibold text-left">السعر</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                ${lines.map(l => `
+                  <tr>
+                    <td class="py-1.5 px-2 text-slate-800">${l.product_name || l.name || ('منتج ' + l.product_id)}</td>
+                    <td class="py-1.5 px-2 font-mono text-center">${l.product_uom_qty || l.qty || 1}</td>
+                    <td class="py-1.5 px-2 font-mono text-left">${(l.price_unit || 0).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot class="bg-slate-50 border-t border-slate-100">
+                <tr>
+                  <td colspan="2" class="py-2 px-2 font-bold text-slate-700">الإجمالي</td>
+                  <td class="py-2 px-2 font-mono font-bold text-blue-700 text-left text-sm">
+                    EGP ${(o.amount_total || 0).toLocaleString()}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       </div>
     `;
   } else {
-    // Generic table or summary
     contentHtml = `
       <div class="text-xs font-bold text-slate-800 border-b pb-2 border-slate-100">بيانات العملية المعتمدة من Odoo</div>
-      <pre class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] font-mono overflow-x-auto text-slate-700"><code>${JSON.stringify(result, null, 2)}</code></pre>
+      <pre class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] font-mono overflow-x-auto text-slate-700 text-left" dir="ltr"><code>${JSON.stringify(result, null, 2)}</code></pre>
     `;
   }
 
   card.innerHTML = `
-    <div class="flex items-center justify-between">
-      <span class="text-xs font-bold text-blue-700">تقرير استعلام Odoo 19</span>
-      <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">READ_VERIFIED</span>
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-bold text-blue-700 flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+        تقرير استعلام Odoo 19
+      </span>
+      <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold tracking-wider">READ_VERIFIED</span>
     </div>
-    <p class="text-xs text-slate-700 font-data">${responseAr}</p>
+    ${responseAr ? `<p class="text-[13px] text-slate-700 font-data leading-relaxed bg-blue-50/50 p-2 rounded-lg border border-blue-100/50">${responseAr}</p>` : ''}
     ${contentHtml}
   `;
 

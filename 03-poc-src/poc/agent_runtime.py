@@ -52,14 +52,14 @@ CONFIRMATION_DECLINED = "confirmation_declined"
 
 # Arabic response templates keyed by gateway result status.
 _RESPONSE_TEMPLATES = {
-    ACCEPTED: "تم تجهيز طلبك بنجاح: {detail}",
-    CONFIRMATION_REQUIRED: "الطلب يحتاج تأكيد منك قبل التنفيذ. رقم الطلب: {detail}",
-    CONFLICT: "فيه تعارض: العملية ده تم تنفيذها أو لسه بيتم تنفيذها بطلب تاني.",
-    IN_PROGRESS: "العملية لسه شغالة حالياً. برجاء المحاولة بعد لحظات.",
-    REPLAY: "تم إرجاع النتيجة من عملية سابقة مطابقة.",
-    DENIED: "مسموحلكش تنفيذ العملية دي: {detail}",
-    CONFIRMED_EXECUTION: "تم تنفيذ العملية بعد تأكيدك: {detail}",
-    CONFIRMATION_DECLINED: "تم رفض العملية ولم يتم تنفيذها.",
+    ACCEPTED: "تمام يا فندم، تم تجهيز طلبك بنجاح:\n{detail}",
+    CONFIRMATION_REQUIRED: "الطلب ده محتاج تأكيد من حضرتك قبل ما ننفذه. رقم الطلب: {detail}",
+    CONFLICT: "عفواً، فيه تعارض: العملية دي اتنفذت أو لسه بتتنفيذ في طلب تاني.",
+    IN_PROGRESS: "العملية لسه شغالة حالياً، ثواني وارجع لحضرتك.",
+    REPLAY: "النتيجة دي من عملية سابقة مطابقة.",
+    DENIED: "بعتذر لحضرتك، مفيش صلاحية لتنفيذ العملية دي:\n{detail}",
+    CONFIRMED_EXECUTION: "تم تنفيذ العملية بنجاح بعد تأكيد حضرتك:\n{detail}",
+    CONFIRMATION_DECLINED: "تمام، تم إلغاء العملية بناءً على طلبك.",
 }
 
 
@@ -75,21 +75,30 @@ def _read_result_summary(result: Mapping[str, Any]) -> str:
     if isinstance(customers, list):
         if not customers:
             return "مفيش عملاء مطابقين للبحث."
-        names = "، ".join(str(entry.get("name", "?")) for entry in customers[:5])
-        more = f" (و{len(customers) - 5} كمان)" if len(customers) > 5 else ""
-        return f"لقيت {len(customers)} عميل: {names}{more}"
+        summaries = [f"- {c.get('name', '?')} (تليفون: {c.get('phone', '-')}, إيميل: {c.get('email', '-')}, العنوان: {c.get('street', '-')}, حد ائتمان: {c.get('credit_limit', 0)})" for c in customers[:5]]
+        more = f"\nوفي {len(customers) - 5} عميل تانيين." if len(customers) > 5 else ""
+        return f"لقيت {len(customers)} عميل:\n" + "\n".join(summaries) + more
     products = result.get("products")
     if isinstance(products, list):
         if not products:
             return "مفيش منتجات مطابقة للبحث."
-        rows = "، ".join(f"{entry.get('name', '?')}" for entry in products[:5])
-        return f"لقيت {len(products)} منتج: {rows}"
+        summaries = [f"- {p.get('name', '?')} (كود: {p.get('default_code', '-')}, سعر: {p.get('list_price', 0)}, متاح: {p.get('qty_available', 0)})" for p in products[:5]]
+        more = f"\nوفي {len(products) - 5} منتج تانيين." if len(products) > 5 else ""
+        return f"لقيت {len(products)} منتج:\n" + "\n".join(summaries) + more
     customer = result.get("customer")
     if isinstance(customer, dict):
-        return f"بيانات العميل: {customer.get('name', '?')}"
+        details = "، ".join(f"{k}: {v}" for k, v in customer.items() if k != "name")
+        return f"بيانات العميل {customer.get('name', '?')}:\n{details}"
     order = result.get("order")
     if isinstance(order, dict):
-        return f"الأوردر {order.get('name', '?')} حالة {order.get('state', '?')} بإجمالي {order.get('amount_total', '?')}"
+        state_map = {"draft": "مسودة", "sale": "مؤكد", "cancel": "ملغي", "done": "منتهي"}
+        state_ar = state_map.get(order.get('state', ''), order.get('state', '?'))
+        partner = order.get('partner_id', '?')
+        if isinstance(partner, list) and len(partner) > 1:
+            partner = partner[1]
+        lines = order.get("order_line", [])
+        lines_summary = f"وعدد المنتجات في الأوردر {len(lines)}" if lines else "بدون منتجات"
+        return f"الأوردر {order.get('name', '?')} للعميل {partner} حالة {state_ar} بإجمالي {order.get('amount_total', '?')} جنيه\n{lines_summary}"
     return ""
 
 
@@ -153,8 +162,16 @@ class AgentRuntime:
 
     def _build_system_prompt(self) -> str:
         return (
-            "You are an enterprise ERP assistant. Always select and invoke the single appropriate tool for the user's request.\n"
-            "CRITICAL: When the user specifies names or search terms in Arabic, keep the query parameter in Arabic exactly as provided by the user. Never translate search queries or proper names to English."
+            "You are a professional Egyptian business consultant and ERP assistant (تتحدث بلهجة مصرية مهنية وودودة). "
+            "Your goal is to help users manage their business effectively.\n\n"
+            "AVAILABLE TOOLS: 'customer.search', 'customer.get', 'product.search', 'sales.order.create', 'sales.order.get'.\n"
+            "GUIDELINES:\n"
+            "1. Answer general business/ERP questions conversationally even if no tool is needed.\n"
+            "2. ALWAYS select the single correct tool when an ERP operation is requested.\n"
+            "3. Explain results in detail with context, analysis, and provide business insights.\n"
+            "4. Include recommendations and next steps after every operation.\n"
+            "5. CRITICAL: When the user specifies names or search terms in Arabic, keep the query parameter in Arabic exactly as provided by the user. Never translate search queries or proper names to English.\n"
+            "6. Your responses must be rich, conversational, and in Egyptian Arabic."
         )
 
     def _validate_tool_call(self, call: LLMToolCall) -> tuple[str | None, str | None]:
@@ -291,7 +308,7 @@ class AgentRuntime:
             if result.result:
                 detail = _read_result_summary(result.result) or json.dumps(result.result, ensure_ascii=False, default=str)
             else:
-                detail = "استعلام جاهز للتنفيذ"
+                detail = "العملية تمت بنجاح، مفيش تفاصيل إضافية."
         elif result.status == CONFIRMATION_REQUIRED:
             detail = result.reason or ""
         elif result.status == DENIED:

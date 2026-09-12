@@ -12,6 +12,7 @@ import http.server
 import json
 import logging
 import os
+import time
 from pathlib import Path
 import socket
 import sys
@@ -34,6 +35,22 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
+    def send_response(self, code: int, message: str | None = None) -> None:
+        self.status_code = code
+        super().send_response(code, message)
+
+    def handle_one_request(self) -> None:
+        start_time = time.time()
+        self.status_code = 500
+        super().handle_one_request()
+        if hasattr(self, 'command'):
+            duration_ms = int((time.time() - start_time) * 1000)
+            LOGGER.info("%s %s - %s - %dms", self.command, self.path, getattr(self, 'status_code', '-'), duration_ms)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass  # Disable default logging in favor of our custom structured logging
+
+
     @property
     def runtime(self) -> AgentRuntime:
         return self.server.runtime  # type: ignore[attr-defined]
@@ -45,6 +62,11 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-XSS-Protection", "1; mode=block")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "microphone=(), camera=(), geolocation=()")
         self.end_headers()
 
     def do_OPTIONS(self) -> None:
@@ -53,6 +75,8 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _read_json_body(self) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length == 0:
+            return {}
+        if content_length > 65536:  # 64KB max
             return {}
         raw_body = self.rfile.read(content_length)
         try:
@@ -69,6 +93,10 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/health":
+            self._handle_get_health()
+            return
 
         if path == "/api/audit":
             self._handle_get_audit(parsed.query)
@@ -110,6 +138,10 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         self._send_json(404, {"error": "Not Found", "path": path})
+
+    def _handle_get_health(self) -> None:
+        uptime = int(time.time() - self.server.start_time)  # type: ignore[attr-defined]
+        self._send_json(200, {"status": "healthy", "version": "1.0.0", "uptime_seconds": uptime})
 
     def _handle_get_tools(self) -> None:
         registry = get_registry()
@@ -186,6 +218,10 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(400, {"success": False, "error": {"code": "EMPTY_MESSAGE", "message": "الرسالة فارغة."}})
             return
 
+        if len(message) > 2000:
+            self._send_json(400, {"success": False, "error": {"code": "MESSAGE_TOO_LONG", "message": "الرسالة طويلة جداً. الحد الأقصى 2000 حرف."}})
+            return
+
         try:
             result = self.runtime.process(message)
             payload = _build_payload(result)
@@ -196,7 +232,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "success": False,
                 "status": "server_error",
                 "response_ar": "حدث خطأ غير متوقع في الخادم أثناء معالجة الطلب.",
-                "error": {"code": "SERVER_ERROR", "message": str(err)},
+                "error": {"code": "SERVER_ERROR", "message": "Internal server error"},
             })
 
     def _handle_post_confirm(self) -> None:
@@ -216,7 +252,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "success": False,
                 "status": "server_error",
                 "response_ar": "حدث خطأ أثناء اعتماد وتنفيذ المقترح.",
-                "error": {"code": "CONFIRM_ERROR", "message": str(err)},
+                "error": {"code": "CONFIRM_ERROR", "message": "Internal server error"},
             })
 
     def _handle_post_decline(self) -> None:
@@ -236,7 +272,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "success": False,
                 "status": "server_error",
                 "response_ar": "حدث خطأ أثناء إلغاء المقترح.",
-                "error": {"code": "DECLINE_ERROR", "message": str(err)},
+                "error": {"code": "DECLINE_ERROR", "message": "Internal server error"},
             })
 
     def _handle_post_test_replay(self) -> None:
@@ -266,6 +302,7 @@ class ERPWebServer(http.server.ThreadingHTTPServer):
 
     def __init__(self, server_address: tuple[str, int], runtime: AgentRuntime) -> None:
         self.runtime = runtime
+        self.start_time = time.time()
         super().__init__(server_address, ERPRequestHandler)
 
 

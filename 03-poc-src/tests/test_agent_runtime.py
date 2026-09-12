@@ -1,4 +1,4 @@
-﻿"""Focused deterministic tests for the Agent Runtime boundary."""
+"""Focused deterministic tests for the Agent Runtime boundary."""
 
 from __future__ import annotations
 
@@ -252,7 +252,7 @@ def test_denied_not_reported_as_success(tmp_path: Path):
     rt = AgentRuntime(llm_client=llm, gateway=gw, user_id="no_access_user@test", tenant_id=TENANT)
     result = rt.process("create order")
     assert result.gateway_result.status == DENIED
-    assert "مسموحلكش" in result.response_ar
+    assert "مفيش صلاحية" in result.response_ar
 
 
 def test_text_only_response(tmp_path: Path):
