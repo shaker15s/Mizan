@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Agent-Native ERP | المنصة المؤسسية النهارية للتحكم الذكي</title>
+
+  <!-- Tailwind CSS CDN with Forms and Container Queries -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'Plus Jakarta Sans', 'sans-serif'],
+            data: ['"IBM Plex Sans Arabic"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            },
+            emerald: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-full flex flex-col bg-slate-50 text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-900">
+
+  <!-- TOP EXECUTIVE APP BAR -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 lg:px-8 py-3 shadow-xs">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      
+      <!-- Brand & Status -->
+      <div class="flex items-center gap-3.5">
+        <div class="w-10 h-10 rounded-xl bg-blue-700 text-white flex items-center justify-center shadow-md shadow-blue-600/20">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-bold text-slate-900 tracking-tight">Agent-Native ERP</h1>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-emerald"></span>
+              <span id="header-odoo-status">ODOO 19 متصل</span>
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 font-data">منظومة الذكاء الاصطناعي المؤسسي المعتمد • بدون صلاحيات مباشرة</p>
+        </div>
+      </div>
+
+      <!-- User & Quick Action Buttons -->
+      <div class="flex items-center gap-2.5">
+        <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200/80 text-xs font-data">
+          <span class="text-slate-500">المستخدم:</span>
+          <span class="font-bold text-slate-800 font-mono">sales_user@test</span>
+          <span class="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[10px] font-mono font-bold">R1_SALES</span>
+        </div>
+
+        <button id="btn-tools-modal" onclick="openToolsModal()" class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          العقود (5 أدوات)
+        </button>
+
+        <button id="btn-audit-drawer" onclick="openAuditDrawer()" class="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          سجل التدقيق (SHA-256)
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN DUAL-PANE COCKPIT -->
+  <div class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+    
+    <!-- RIGHT MAIN PANEL: CONVERSATIONAL AGENT COCKPIT (8 cols) -->
+    <main class="lg:col-span-8 flex flex-col bg-white rounded-2xl hairline-card overflow-hidden shadow-sm">
+      
+      <!-- Chat Header -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+            🤖
+          </div>
+          <div>
+            <h2 class="text-sm font-bold text-slate-800">مساعد العمليات المباشر (Agent Runtime)</h2>
+            <p class="text-[11px] text-slate-500 font-data">مربوط بنموذج كلود الذكي عبر وسيط آمن وبوابة Odoo المحمية</p>
+          </div>
+        </div>
+        <button onclick="clearChat()" class="text-xs text-slate-500 hover:text-slate-800 transition-colors px-2 py-1 rounded hover:bg-slate-100">
+          مسح المحادثة
+        </button>
+      </div>
+
+      <!-- Chat Messages Scrollable Feed -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
+        <!-- Initial Welcome Message -->
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
+            ERP
+          </div>
+          <div class="max-w-[85%] bg-slate-100 text-slate-800 rounded-2xl rounded-tr-none px-4 py-3 shadow-xs text-sm font-data space-y-1">
+            <p class="font-bold text-slate-900">أهلاً بك يا فندم! أنا جاهز لتنفيذ ومتابعة عملياتك على Odoo 19.</p>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              تقدر تطلب بالعامية المصرية أو العربية الفصحى، زي: استعلام عن عميل، فحص مبيعات أسبوعية، أو إنشاء أمر بيع جديد بمراجعة واعتماد لحظي.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Suggestion Action Chips -->
+      <div class="px-4 py-2 border-t border-slate-100 bg-slate-50/70 overflow-x-auto flex items-center gap-2 text-xs">
+        <span class="text-slate-400 font-semibold shrink-0 text-[11px]">اقتراحات سريعة:</span>
+        <button onclick="sendQuickPrompt('هات مبيعات آخر أسبوع لفرع المعادي')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          📊 مبيعات المعادي
+        </button>
+        <button onclick="sendQuickPrompt('اعمل طلب بيع للعميل 42 لعدد 20 من المنتج 55')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          🛒 أمر بيع للعميل 42 (20 مياه)
+        </button>
+        <button onclick="sendQuickPrompt('ابحث عن العميل محمد أحمد')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          🔍 استعلام عن محمد أحمد
+        </button>
+        <button onclick="sendQuickPrompt('اعمل طلب بيع لأحمد حسن بـ 5 زيت عباد الشمس')" class="shrink-0 px-2.5 py-1 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition font-data shadow-2xs">
+          🛒 طلب لأحمد حسن (5 زيت)
+        </button>
+      </div>
+
+      <!-- Chat Command Input Bar -->
+      <div class="p-3 lg:p-4 bg-white border-t border-slate-200">
+        <form id="chat-form" onsubmit="handleChatSubmit(event)" class="flex items-center gap-2 relative">
+          <input 
+            type="text" 
+            id="chat-input" 
+            placeholder="اكتب طلبك هنا بالعامية أو الفصحى... (مثال: اعمل أمر بيع للعميل 42 لعدد 15 من المنتج 55)"
+            class="flex-1 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-slate-900 placeholder:text-slate-400 text-sm rounded-xl px-4 py-3 border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition font-data"
+            autocomplete="off"
+          />
+          <button 
+            type="button" 
+            id="btn-voice-sim" 
+            onclick="toggleVoiceSimulation()" 
+            title="تسجيل صوتي للمندوب"
+            class="p-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+          </button>
+          <button 
+            type="submit" 
+            id="btn-send"
+            class="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 shrink-0"
+          >
+            <span>إرسال</span>
+            <svg class="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          </button>
+        </form>
+      </div>
+
+    </main>
+
+    <!-- LEFT SIDEBAR: TELEMETRY, SAFETY PIPELINE & AUDIT (4 cols) -->
+    <aside class="lg:col-span-4 flex flex-col space-y-4 overflow-y-auto">
+      
+      <!-- 8-STAGE ARCHITECTURE PIPELINE STEPPER -->
+      <div class="hairline-card rounded-2xl p-4 bg-white shadow-xs">
+        <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+          <span class="text-xs font-mono text-blue-700 font-bold uppercase tracking-wider">مسار الأمان الصارم (8-Stage Pipeline)</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">حماية 100%</span>
+        </div>
+        
+        <div class="space-y-2 relative" id="pipeline-stepper">
+          <!-- Step 1 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-1">
+            <span class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-mono font-bold">1</span>
+            <span class="text-slate-800 font-semibold">استقبال الأمر باللغة الطبيعية</span>
+          </div>
+          <!-- Step 2 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-2">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">2</span>
+            <span class="text-slate-600">تحليل النية والمعاملات عبر LLM</span>
+          </div>
+          <!-- Step 3 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-3">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">3</span>
+            <span class="text-slate-600">مطابقة عقد الأداة (Schema Validation)</span>
+          </div>
+          <!-- Step 4 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-4">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">4</span>
+            <span class="text-slate-600">فحص الصلاحيات وسياسة RBAC</span>
+          </div>
+          <!-- Step 5 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-5">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">5</span>
+            <span class="text-slate-600">بوابة التوقيع البشري (Confirmation Gate)</span>
+          </div>
+          <!-- Step 6 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-6">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">6</span>
+            <span class="text-slate-600">التنفيذ المعزول في Odoo 19 (JSON-2)</span>
+          </div>
+          <!-- Step 7 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-7">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">7</span>
+            <span class="text-slate-600">القراءة الراجعة للتحقق (Verification)</span>
+          </div>
+          <!-- Step 8 -->
+          <div class="flex items-center gap-2.5 text-xs font-data" id="step-8">
+            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-mono font-bold">8</span>
+            <span class="text-slate-600">توليد كتلة التدقيق التشفيرية (SHA-256)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TELEMETRY & CONNECTION HEALTH -->
+      <div class="hairline-card rounded-2xl p-4 bg-white shadow-xs space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span class="text-xs font-bold text-slate-800">حالة الربط والبيئة التشغيلية</span>
+          <span class="text-[10px] font-mono text-emerald-600 font-bold" id="telemetry-live-badge">ONLINE</span>
+        </div>
+        <div class="space-y-2 text-xs font-data">
+          <div class="flex justify-between">
+            <span class="text-slate-500">حاوية Odoo 19:</span>
+            <span class="font-mono text-slate-800 font-bold" id="odoo-db-label">localhost:8069 (poc_test)</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">مزود الذكاء الاصطناعي:</span>
+            <span class="font-mono text-blue-700 font-semibold" id="model-label">claude-haiku via FreeCC</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">قاعدة بيانات البوابة:</span>
+            <span class="font-mono text-slate-700 text-[11px]">data/poc_gateway.db (SQLite)</span>
+          </div>
+          <div class="flex justify-between border-t border-slate-100 pt-1.5">
+            <span class="text-slate-500">حماية عدم التكرار (Idempotency):</span>
+            <span class="font-mono text-emerald-700 font-bold text-[11px]">ENFORCED (RFC-8941)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- IDEMPOTENCY REPLAY TEST SIMULATOR -->
+      <div class="hairline-card rounded-2xl p-4 bg-white shadow-xs space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span class="text-xs font-bold text-slate-800">اختبار الأمان: منع التكرار (Replay Attack)</span>
+          <span class="text-[10px] font-mono text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Security Guard</span>
+        </div>
+        <p class="text-xs text-slate-600 font-data leading-relaxed">
+          جرب إرسال أمر مكرر بنفس المفتاح للتأكد من قيام البوابة برفضه بحالة <code class="font-mono text-[11px] bg-slate-100 px-1 py-0.5 rounded">HTTP 409</code> لحماية Odoo من إنشاء طلبات مكررة.
+        </p>
+        <button onclick="triggerReplaySimulation()" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 active:scale-98 text-white text-xs font-bold font-mono transition flex items-center justify-center gap-1.5">
+          <span>⚡ محاكاة هجوم إعادة المعاملة</span>
+        </button>
+        <div id="replay-feedback" class="hidden text-xs font-mono p-2.5 rounded-xl border"></div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- TOOLS REGISTRY MODAL -->
+  <div id="modal-tools" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">سجل عقود الأدوات (Tool Contracts Registry)</h3>
+          <p class="text-xs text-slate-500 font-data">الأدوات الخمسة المعرفة على الخادم بدون تصريح مباشر للنموذج</p>
+        </div>
+        <button onclick="closeToolsModal()" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200/50">✕</button>
+      </div>
+      <div id="tools-list" class="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-xs">
+        <!-- Dynamically loaded via API -->
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-100 text-right">
+        <button onclick="closeToolsModal()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold font-data">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIT LEDGER DRAWER -->
+  <div id="drawer-audit" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs hidden flex justify-start">
+    <div class="bg-white max-w-2xl w-full h-full flex flex-col shadow-2xl border-l border-slate-200">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-bold text-slate-900">سجل التدقيق التشفيري المباشر</h3>
+            <span id="audit-chain-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">CHAIN VALID</span>
+          </div>
+          <p class="text-xs text-slate-500 font-data">سلسلة كتل SHA-256 متصلة غير قابلة للتلاعب</p>
+        </div>
+        <button onclick="closeAuditDrawer()" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200/50">✕</button>
+      </div>
+      <div class="p-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs font-data">
+        <span class="text-slate-600">عدد العمليات المسجلة: <strong id="audit-count" class="font-mono text-slate-900">0</strong></span>
+        <button onclick="loadAuditData()" class="text-blue-700 font-semibold hover:underline flex items-center gap-1">
+          <span>تحديث السجل</span>
+        </button>
+      </div>
+      <div id="audit-records-list" class="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-xs">
+        <!-- Dynamically loaded via API -->
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-100 text-right">
+        <button onclick="closeAuditDrawer()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold font-data">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Application Script -->
+  <script src="app.js"></script>
+</body>
+</html>
