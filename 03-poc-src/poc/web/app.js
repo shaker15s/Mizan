@@ -362,10 +362,12 @@ function renderConfirmationCard(proposal, responseAr) {
   card.id = `proposal-card-${proposal.proposal_id}`;
 
   const args = proposal.arguments || {};
-  const orderLines = args.order_lines || [];
-  const firstLine = orderLines[0] || { product_id: 55, qty: 1, price_unit: 12.0 };
-  const initialQty = firstLine.qty || 1;
+  const orderLines = args.lines || args.order_lines || [];
+  const firstLine = orderLines[0] || { product_id: 55, quantity: 1 };
+  const initialQty = firstLine.quantity || firstLine.qty || 1;
   const initialPrice = firstLine.price_unit || 12.0;
+  const customerId = args.customer_id || args.partner_id || 42;
+  const productId = firstLine.product_id || 55;
 
   card.innerHTML = `
     <div class="flex items-center justify-between border-b border-blue-100 pb-2.5">
@@ -389,11 +391,11 @@ function renderConfirmationCard(proposal, responseAr) {
     <div class="bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-2 text-xs font-data">
       <div class="flex justify-between">
         <span class="text-slate-500">العميل المستهدف:</span>
-        <span class="font-bold text-slate-900 font-mono">Partner #${args.partner_id || 42}</span>
+        <span class="font-bold text-slate-900 font-mono">Partner #${customerId}</span>
       </div>
       <div class="flex justify-between items-center">
         <span class="text-slate-500">المنتج:</span>
-        <span class="font-bold text-slate-800">Product #${firstLine.product_id || 55}</span>
+        <span class="font-bold text-slate-800">Product #${productId}</span>
       </div>
       
       <!-- Interactive Quantity Adjuster -->
@@ -441,9 +443,13 @@ function adjustQty(proposalId, delta) {
   currentQty = Math.max(1, currentQty + delta);
   qtyEl.textContent = currentQty;
 
-  const lines = state.activeProposal.arguments?.order_lines || [];
+  const lines = state.activeProposal.arguments?.lines || state.activeProposal.arguments?.order_lines || [];
   if (lines.length > 0) {
-    lines[0].qty = currentQty;
+    if ('quantity' in lines[0]) {
+      lines[0].quantity = currentQty;
+    } else {
+      lines[0].qty = currentQty;
+    }
     const price = lines[0].price_unit || 12.0;
     totalEl.textContent = `EGP ${(currentQty * price).toLocaleString('en-US')}`;
   }

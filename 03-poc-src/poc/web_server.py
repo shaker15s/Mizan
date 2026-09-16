@@ -229,8 +229,13 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(400, {"success": False, "error": {"code": "MESSAGE_TOO_LONG", "message": "الرسالة طويلة جداً. الحد الأقصى 2000 حرف."}})
             return
 
+        LOGGER.info("[CHAT_IN] Message from user: %r", message)
         try:
             result = self.runtime.process(message)
+            LOGGER.info("[CHAT_OUT] Outcome: %s | Tool: %s | Response: %r", 
+                        result.outcome, 
+                        result.tool_call.name if result.tool_call else "None", 
+                        result.response_ar[:100] if result.response_ar else "")
             payload = _build_payload(result)
             self._send_json(200, payload)
         except Exception as err:
@@ -322,8 +327,8 @@ def run_server(port: int = 8080, open_browser: bool = False, runtime: AgentRunti
 
     url = f"http://localhost:{port}"
     print(f"\n=======================================================")
-    print(f"🚀 Agent-Native ERP Daylight Web Cockpit running at:")
-    print(f"👉 {url}")
+    print(f"[*] Agent-Native ERP Daylight Web Cockpit running at:")
+    print(f"    {url}")
     print(f"=======================================================\n")
 
     if open_browser:

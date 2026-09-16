@@ -360,6 +360,37 @@ class IdempotencyStore:
                         record,
                     )
                 elif record.state == STATE_PENDING:
+                    # If a pending reservation has expired (older than 300 seconds), allow renewal
+                    is_expired = False
+                    try:
+                        created_dt = datetime.fromisoformat(record.created_at.replace("Z", "+00:00"))
+                        now_dt = datetime.now(timezone.utc)
+                        if (now_dt - created_dt).total_seconds() > 300:
+                            is_expired = True
+                    except Exception:
+                        pass
+
+                    if is_expired:
+                        # Auto-renew expired pending reservation
+                        connection.execute(
+                            """
+                            UPDATE idempotency_keys
+                            SET execution_id = ?, updated_at = ?
+                            WHERE tenant_id = ? AND user_id = ? AND key = ?
+                            """,
+                            (execution_id, now, tenant_id, user_id, key),
+                        )
+                        row = connection.execute(
+                            """
+                            SELECT * FROM idempotency_keys
+                            WHERE tenant_id = ? AND user_id = ? AND key = ?
+                            """,
+                            (tenant_id, user_id, key),
+                        ).fetchone()
+                        record = _record_from_row(row)
+                        connection.commit()
+                        return IdempotencyOutcome(RESERVED, None, "expired pending reservation renewed", record)
+
                     outcome = IdempotencyOutcome(
                         IN_PROGRESS,
                         IDEMPOTENCY_CONFLICT,

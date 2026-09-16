@@ -13,6 +13,7 @@ reaches the Gateway.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
@@ -165,13 +166,14 @@ class AgentRuntime:
             "You are a professional Egyptian business consultant and ERP assistant (تتحدث بلهجة مصرية مهنية وودودة). "
             "Your goal is to help users manage their business effectively.\n\n"
             "AVAILABLE TOOLS: 'customer.search', 'customer.get', 'product.search', 'sales.order.create', 'sales.order.get'.\n"
-            "GUIDELINES:\n"
-            "1. Answer general business/ERP questions conversationally even if no tool is needed.\n"
-            "2. ALWAYS select the single correct tool when an ERP operation is requested.\n"
-            "3. Explain results in detail with context, analysis, and provide business insights.\n"
-            "4. Include recommendations and next steps after every operation.\n"
-            "5. CRITICAL: When the user specifies names or search terms in Arabic, keep the query parameter in Arabic exactly as provided by the user. Never translate search queries or proper names to English.\n"
-            "6. Your responses must be rich, conversational, and in Egyptian Arabic."
+            "CRITICAL INSTRUCTIONS:\n"
+            "1. NEVER output your internal thinking, reasoning steps, or analysis (like 'Analyze User Input', 'Check Guidelines', 'Identify Tool', 'Execute Tool Call') to the user.\n"
+            "2. When an ERP operation is requested, immediately call the single appropriate tool using the native tool calling mechanism.\n"
+            "3. Answer general business/ERP questions conversationally when no tool is needed.\n"
+            "4. Explain results in detail with context, analysis, and provide business insights.\n"
+            "5. Include recommendations and next steps after every operation.\n"
+            "6. When the user specifies names or search terms in Arabic, keep the query parameter in Arabic exactly as provided by the user. Never translate search queries or proper names to English.\n"
+            "7. Your responses must be rich, conversational, and in Egyptian Arabic."
         )
 
     def _validate_tool_call(self, call: LLMToolCall) -> tuple[str | None, str | None]:
@@ -206,13 +208,44 @@ class AgentRuntime:
         except LLMProviderError as error:
             return AgentResult(outcome="llm_error", response_ar="فيه مشكلة في الاتصال بمزود الذكاء الاصطناعي. حاول تاني.", gateway_result=None, error=str(error))
 
-        if not llm_response.tool_calls:
-            return AgentResult(outcome=TEXT_ONLY, response_ar=llm_response.text or "لم أفهم الطلب.", gateway_result=None)
+        tool_calls = list(llm_response.tool_calls)
+        if not tool_calls and llm_response.text:
+            # Fallback: Check if the model printed a tool call JSON in text
+            text_content = llm_response.text
+            # Look for JSON blocks or object structures containing tool arguments
+            json_matches = re.findall(r"(\{(?:[^{}]|(?:\{[^{}]*\}))*\})", text_content, re.DOTALL)
+            for raw_json in json_matches:
+                try:
+                    parsed = json.loads(raw_json)
+                    if isinstance(parsed, dict):
+                        if "customer_id" in parsed and "lines" in parsed:
+                            tool_calls.append(LLMToolCall(name="sales.order.create", arguments=parsed, call_id=str(uuid.uuid4())))
+                            break
+                        elif "query" in parsed:
+                            if "product" in text_content.lower() or "منتج" in user_input:
+                                tool_calls.append(LLMToolCall(name="product.search", arguments=parsed, call_id=str(uuid.uuid4())))
+                            else:
+                                tool_calls.append(LLMToolCall(name="customer.search", arguments=parsed, call_id=str(uuid.uuid4())))
+                            break
+                        elif "order_id" in parsed:
+                            tool_calls.append(LLMToolCall(name="sales.order.get", arguments=parsed, call_id=str(uuid.uuid4())))
+                            break
+                except Exception:
+                    continue
 
-        if len(llm_response.tool_calls) > 1:
+        if not tool_calls:
+            # Clean any internal analysis headers if model leaked them in TEXT_ONLY
+            cleaned_text = llm_response.text or "لم أفهم الطلب."
+            if "Analyze User Input" in cleaned_text or "Execute Tool Call" in cleaned_text:
+                # Remove internal reasoning leak if present
+                lines = [l for l in cleaned_text.splitlines() if not any(k in l for k in ["Analyze User Input", "Check Guidelines", "Identify Tool", "Execute Tool Call", "Language:", "Translation/Meaning:", "Key entities:"])]
+                cleaned_text = "\n".join(lines).strip() or "تمام يا فندم، أنا تحت أمرك. أقدر أساعدك في أي استفسار أو عملية في النظام."
+            return AgentResult(outcome=TEXT_ONLY, response_ar=cleaned_text, gateway_result=None)
+
+        if len(tool_calls) > 1:
             return AgentResult(outcome=MULTIPLE_TOOL_CALLS, response_ar="وصلت أكثر من طلب أداة في نفس الوقت. برجاء إعادة الصياغة.", gateway_result=None)
 
-        call = llm_response.tool_calls[0]
+        call = tool_calls[0]
         version, error = self._validate_tool_call(call)
         if error:
             return AgentResult(outcome=error, response_ar="الطلب مش صالح: الأداة أو الوسائط غير صحيحة.", gateway_result=None, tool_call=call)
