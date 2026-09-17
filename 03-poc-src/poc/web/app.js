@@ -877,20 +877,63 @@ async function triggerReplaySimulation() {
 
 // --- VOICE SIMULATION ---
 
+let activeVoiceRecognition = null;
+
 function toggleVoiceSimulation() {
   const input = document.getElementById('chat-input');
   const btn = document.getElementById('btn-voice-sim');
-  
-  btn.classList.toggle('bg-rose-100');
-  btn.classList.toggle('text-rose-600');
-  btn.classList.toggle('animate-pulse');
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+  // Click while listening = stop; onend resets the visuals
+  if (activeVoiceRecognition) {
+    activeVoiceRecognition.stop();
+    return;
+  }
+
+  if (!SpeechRecognition) {
+    // No native Web Speech API (e.g. Firefox) — graceful message, then keep the canned-prompt simulation
+    appendMessage('ERP', 'المتصفح ده مش بيدعم الإدخال الصوتي — استخدم كروم.');
+    btn.classList.toggle('bg-rose-100');
+    btn.classList.toggle('text-rose-600');
+    btn.classList.toggle('animate-pulse');
+    input.placeholder = '🎙️ جاري الاستماع للمندوب في الميدان...';
+    setTimeout(() => {
+      btn.classList.remove('bg-rose-100', 'text-rose-600', 'animate-pulse');
+      input.placeholder = 'اكتب طلبك هنا بالعامية أو الفصحى...';
+      input.value = 'اعمل طلب بيع للعميل 42 لعدد 10 من المنتج 55';
+      input.focus();
+    }, 1200);
+    return;
+  }
+
+  _startSpeechRecognition(input, btn);
+}
+
+function _startSpeechRecognition(input, btn) {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'ar-EG';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  btn.classList.add('bg-rose-100', 'text-rose-600', 'animate-pulse');
   input.placeholder = '🎙️ جاري الاستماع للمندوب في الميدان...';
 
-  setTimeout(() => {
+  const restoreVisuals = () => {
     btn.classList.remove('bg-rose-100', 'text-rose-600', 'animate-pulse');
     input.placeholder = 'اكتب طلبك هنا بالعامية أو الفصحى...';
-    input.value = 'اعمل طلب بيع للعميل 42 لعدد 10 من المنتج 55';
-    input.focus();
-  }, 1200);
+  };
+
+  recognition.onresult = (event) => {
+    input.value = event.results[0][0].transcript;
+    document.getElementById('chat-form').dispatchEvent(new Event('submit', { cancelable: true }));
+  };
+  recognition.onerror = restoreVisuals;
+  recognition.onend = () => {
+    activeVoiceRecognition = null;
+    restoreVisuals();
+  };
+
+  recognition.start();
+  activeVoiceRecognition = recognition;
 }
