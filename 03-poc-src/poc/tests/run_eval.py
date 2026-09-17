@@ -41,6 +41,7 @@ from poc.llm_client import (
     LLMToolDefinition,
     build_llm_client,
 )
+from poc.normalization import normalize_arabic
 from poc.odoo_client import OdooValidationError
 from poc.tool_contracts import get_registry
 
@@ -62,17 +63,6 @@ _SEED_PRODUCTS = {
     58: {"id": 58, "name": "سكر 1 كيلو", "list_price": 38.0, "qty_available": 200.0},
     59: {"id": 59, "name": "شاي العروسة 250 جم", "list_price": 45.0, "qty_available": 90.0},
 }
-
-
-def normalize_arabic(text: str) -> str:
-    """Normalize Arabic text for search matching and argument comparison."""
-    if not isinstance(text, str):
-        return str(text)
-    s = text.strip()
-    s = "".join(c for c in s if c not in "\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\u0670")
-    s = s.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ٱ", "ا")
-    s = s.replace("ة", "ه").replace("ى", "ي")
-    return s.lower()
 
 
 def _normalize_args(obj: Any) -> Any:

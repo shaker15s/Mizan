@@ -111,6 +111,11 @@ class AnthropicLLMClient:
                     {"name": t.name, "description": t.description, "input_schema": dict(t.input_schema)}
                     for t in tools
                 ]
+                force_tool_choice = os.environ.get("FORCE_TOOL_CHOICE", "").strip().lower()
+                if force_tool_choice == "required" and len(tools) == 1:
+                    kwargs["tool_choice"] = {"type": "tool", "name": tools[0].name}
+                elif force_tool_choice:
+                    kwargs["tool_choice"] = {"type": "any"}
             response = self._client.messages.create(**kwargs)
         except Exception as error:
             raise LLMProviderError(f"LLM provider call failed: {error}") from error
@@ -175,6 +180,11 @@ class OpenAICompatibleLLMClient:
                 }
                 for t in tools
             ]
+            force_tool_choice = os.environ.get("FORCE_TOOL_CHOICE", "").strip().lower()
+            if force_tool_choice == "required" and len(tools) == 1:
+                payload["tool_choice"] = {"type": "function", "function": {"name": tools[0].name}}
+            elif force_tool_choice:
+                payload["tool_choice"] = "required"
         try:
             response = httpx.post(
                 f"{self._base_url}/chat/completions",

@@ -45,6 +45,7 @@ from poc.idempotency import (
     compute_idempotency_key,
     compute_request_fingerprint,
 )
+from poc.normalization import normalize_arabic
 from poc.tool_contracts import ToolRegistry, get_registry
 from poc.errors import (
     ENTITY_NOT_FOUND,
@@ -794,9 +795,23 @@ class ToolGateway:
         try:
             if odoo["method"] == "search_read":
                 query = str(context.record.arguments["query"])
-                domain = [["name", "ilike", query]]
                 limit = int(limit_cap) if limit_cap else None
-                records = odoo_client_search_read(context.odoo_client, model, domain, fields, limit)
+                records = odoo_client_search_read(
+                    context.odoo_client, model, [["name", "ilike", query]], fields, limit
+                )
+                if not records:
+                    # ponytail: heuristic fallback ladder for Arabic orthography
+                    # (أ/إ/آ, ة/ه, ى/ي) — Odoo ilike matches raw stored names, so a
+                    # bare-typed query misses hamza-stored records and vice versa.
+                    # Each variant runs only when the previous returned empty
+                    # (max 3 Odoo calls, usually 1); a normalizing search backend
+                    # is the upgrade path if matching quality matters at scale.
+                    for variant in _query_variants(query):
+                        records = odoo_client_search_read(
+                            context.odoo_client, model, [["name", "ilike", variant]], fields, limit
+                        )
+                        if records:
+                            break
             elif odoo["method"] == "read":
                 id_field = "customer_id" if "customer_id" in context.record.arguments else "order_id"
                 record_id = int(context.record.arguments[id_field])
@@ -1124,6 +1139,27 @@ def _utc_now() -> str:
 def odoo_client_search_read(client: Any, model: str, domain: list[Any], fields: list[str], limit: int | None) -> list[dict[str, Any]]:
     """Indirect search_read call so tests can stub without importing the client."""
     return client.search_read(model, domain, fields, limit)
+
+
+def _query_variants(query: str) -> list[str]:
+    """Bounded fallback variants for Arabic orthography matching (max 2).
+
+    Odoo ilike matches raw stored names: a bare-typed "احمد" never matches a
+    hamza-stored "أحمد" and vice versa. The ladder tries the normalized form
+    (hamza/taa/yaa unified) then the hamza-initial form of the first word,
+    skipping the definite article "ال". Bounded heuristic — see the ponytail
+    comment at the call site.
+    """
+    variants: list[str] = []
+    normalized = normalize_arabic(query)
+    if normalized != query:
+        variants.append(normalized)
+    words = query.split()
+    if words and len(words[0]) > 2 and words[0].startswith("ا") and not words[0].startswith("ال"):
+        hamza_form = " ".join(["أ" + words[0][1:], *words[1:]])
+        if hamza_form != query and hamza_form not in variants:
+            variants.append(hamza_form)
+    return variants
 
 
 def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict[str, Any]:
