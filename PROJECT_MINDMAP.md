@@ -152,7 +152,8 @@ Odoo 19 Community (Docker, localhost:8069)
 | `sales.order.get` | read | R0 | لا | `sale.order` read بالـ ID (يُستخدم داخلياً للتحقق) |
 
 - كل عقد: `tool_version: 1.0.0` + inputSchema/outputSchema + `additionalProperties: false`
-- **حدود معروفة وموثقة:** `ilike` مش بيطبّع الألف/التاء المربوطة (تم حلها جزئياً بـ `normalize_arabic` في التقييم الحي)؛ البحث بيمس كل الـ partners مش العملاء بس
+- **حدود معروفة وموثقة:** `ilike` مش بيطبّع الألف/التاء المربوطة — ✅ **اتحلت (17 سبتمبر):** fallback ladder في `_execute_read` (raw → normalized → hamza-variant، max 3 calls عادة 1) — "احمد" بلاقي "أحمد حسن" والعكس؛ البحث بيمس كل الـ partners مش العملاء بس
+- 📦 `poc/normalization.py` — الـ normalizer المشترك (نقل من run_eval.py — إزالة ازدواجية)
 
 ---
 
@@ -198,6 +199,7 @@ Odoo 19 Community (Docker, localhost:8069)
 - `FakeLLMClient` — test double deterministic
 - **الـ system prompt:** مستشار أعمال مصري محترف + قواعد صارمة (لا تسريب تفكير داخلي، لا ترجمة أسماء عربية، native tool calling)
 - 🆕 **Fallback ذكي (غير مسجل):** لو الموديل طبع tool call كـ JSON في النص بدل native calls — الـ runtime يلتقطه ويرسّمه للأداة الصحيحة + تنظيف تسريب الرأس التحليلي
+- ✅ **tool_choice opt-in (17 سبتمبر):** `FORCE_TOOL_CHOICE` env (default off) — anthropic → `{"type":"any"}` / `{"type":"tool","name":X}`، openai_compatible → `"required"` — يمنع تردد text_only على العمليات التجارية (deployment-level opt-in، حسب فلسفة المشروع)
 
 ---
 
@@ -215,14 +217,15 @@ Odoo 19 Community (Docker, localhost:8069)
   - درج سجل التدقيق التشفيري + مودال عقود الأدوات
   - **تصدير CSV** + نسخ الملخص (تحسينات Consortium)
 - 🆕 (غير مسجل): `[CHAT_IN]/[CHAT_OUT]` logging + إصلاح بطاقة التأكيد لتقرأ `lines` مش `order_lines` بس + fix لـ adjustQty
+- ✅ (17 سبتمبر): **صوت حقيقي** — Web Speech API (`ar-EG`, native feature) بدل الـ placeholder + fallback رشيق لمتصفحات مش بتدعم · **خطوط premium** — Alexandria (sans/UI) + Readex Pro (data) بدل Cairo/IBM Plex (Cairo بقى generic) · JetBrains Mono للـ hashes
 
 ---
 
 ## 9) الاختبارات والتقييم (Tests & Live Evaluation) 🧪
 
-### الحالة الحقيقية (اتحققت منها بنفسي النهاردة)
-- **pytest:** ✅ **336 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — 70.9 ثانية
-- **ملفات الاختبار:** ~18 ملف: gateway, idempotency, confirmation, authz, audit_store, tool_contracts, odoo_client, llm, errors, verification, scenarios (golden path, security, errors), phase regressions
+### الحالة الحقيقية (اتحققت منها بنفسي — آخر تشغيل 17 سبتمبر)
+- **pytest:** ✅ **351 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — 23.8 ثانية (+15 test جديد: normalization ladder + tool_choice)
+- **ملفات الاختبار:** ~20 ملف: gateway, idempotency, confirmation, authz, audit_store, tool_contracts, odoo_client, llm, errors, verification, normalization_gateway (جديد), tool_choice (جديد), scenarios (golden path, security, errors), phase regressions
 - **استيراد scanner + env-scan + secret-leak scan:** اختبارات من الطبقة الأولى
 
 ### التقييم الحي (10 سبتمبر — AUTHORITATIVE)
@@ -268,15 +271,15 @@ ae57cc8  phase 2: execute read-only tools in the gateway (B1)
 29aa1b4  feat: Consortium Plan Phase 1 - Circuit Breaker, SQLite WAL concurrency, CSV export & sparklines  ← HEAD
 ```
 
-### 🆕 التغييرات غير المسجلة (uncommitted — 4 ملفات، +95/−20)
-| الملف | التغيير |
-|---|---|
-| `agent_runtime.py` | Fallback parsing لـ tool calls من النص + تعزيز system prompt (منع تسريب التفكير) + تنظيف الرؤوس التحليلية |
-| `idempotency.py` | تجديد تلقائي للحجز pending المنتهي (>300s) بدل IDEMPOTENCY_IN_PROGRESS للأبد |
-| `web/app.js` | بطاقة التأكيد تقرأ `lines` (مش `order_lines` بس) + عرض صحيح للـ customer/product ID + إصلاح adjustQty |
-| `web_server.py` | `[CHAT_IN]/[CHAT_OUT]` logging + banner بسيط ASCII-safe |
-
-**⚠️ التزم هذه التغييرات — هي إصلاحات حقيقية لكنها مكشوفة حالياً.**
+### ✅ اتلزمت (17 سبتمبر — 6 commits)
+```
+c2ea803  fix: text-JSON tool-call fallback, expired-reservation renewal, confirmation card lines fix, chat in/out logging
+f0909eb  chore: remove temp patch files and tmp test databases
+55ddea7  docs: full project mind map
+da95a37  feat: Arabic normalization fallback ladder in gateway + tool_choice opt-in (FORCE_TOOL_CHOICE)
+fcc7909  feat(web): premium Arabic fonts (Alexandria + Readex Pro) and real voice input via Web Speech API (ar-EG)
+6280cdb  docs+ci: add project README and GitHub Actions CI workflow
+```
 
 ---
 
@@ -329,17 +332,20 @@ ae57cc8  phase 2: execute read-only tools in the gateway (B1)
 
 ## 13) إيه اللي ناقص / الخطوة الجاية (Roadmap) 🚀
 
-### فوري (قبل أي حاجة)
-1. **التزم الـ 4 ملفات المعدلة** — إصلاحات حقيقية مكشوفة
-2. **نظافة:** امسح `patch.txt`, `.tmp.patch`, `.tmp_py.txt`, `tmp_*.db` من data/
-3. **branch protection + CI** على GitHub (الـ PRD §123: CI على كل PR)
+### فوري — ✅ تم (17 سبتمبر)
+1. ~~التزم الـ 4 ملفات المعدلة~~ — تم (c2ea803)
+2. ~~النظافة~~ — تم (f0909eb)
+3. ~~README + CI~~ — تم (6280cdb) — `README.md` + `.github/workflows/ci.yml` (CI على push/PR، الـ 5 integration auto-skip)
+4. ✅ **Accuracy fix** — normalization fallback ladder في الـ gateway (da95a37) — "احمد" بلاقي "أحمد حسن" والعكس (max 3 calls، عادة 1)
+5. ✅ **tool_choice opt-in** — `FORCE_TOOL_CHOICE` env (da95a37) — default off، يمنع تردد text_only
+6. ✅ **خطوط premium** — Alexandria + Readex Pro (fcc7909)
+7. ✅ **صوت حقيقي** — Web Speech API ar-EG بدل الـ placeholder (fcc7909)
 
 ### قصير المدى (60 يوم — حسب الـ PRD §141)
 - دومين أغنى (Inventory + Warehouses → Purchasing + Suppliers)
 - **ERPNext adapter** (أول cross-ERP)
 - Policy engine UI + Approvals Center + AI Activity Center
-- **`tool_choice=any`** للعمليات التجارية (يمنع text_only hesitation)
-- تحسين parameter accuracy (الـ 74.44% → 95%): aliases + normalizing أغنى
+- ~~tool_choice للعمليات التجارية~~ ✅ تم · ~~تحسين accuracy بـ normalization~~ ✅ تم (الـ ladder) — الباقي: aliases + scorecard view + eval as regression gate (skill: `wshobson/agents@llm-evaluation`, 11.3K installs)
 
 ### متوسط (90 يوم)
 - Production-grade connector framework + أول pilots خارجيين (5-10 شركات، founder-led)
