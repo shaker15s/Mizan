@@ -52,7 +52,31 @@ def _build_payload(result: AgentResult) -> dict[str, Any]:
         payload["error"] = {"code": payload["result"].get("error_code"), "message": "العملية السابقة فشلت؛ النتيجة معاد إرجاعها من السجل."}
     if gateway_result is not None and gateway_result.proposal is not None:
         payload["proposal"] = dict(gateway_result.proposal)
+    # --- cockpit contract (additive): the structured card + turn provenance ---
+    answer = getattr(result, "answer", None)
+    payload["answer"] = answer.to_dict() if answer is not None else None
+    payload["answer_markdown"] = answer.to_markdown() if answer is not None else None
+    payload["response_markdown"] = payload["answer_markdown"] or _text_to_markdown(result.response_ar)
+    payload["tool_call"] = (
+        {"name": result.tool_call.name, "arguments": dict(result.tool_call.arguments)}
+        if result.tool_call is not None
+        else None
+    )
+    payload["meta"] = {
+        "engine": getattr(result, "engine", "unknown"),
+        "timings": dict(getattr(result, "timings", {}) or {}),
+        "stages": list(getattr(result, "stages", ()) or ()),
+        "request_id": gateway_result.request_id if gateway_result is not None else None,
+        "tool": gateway_result.tool_name if gateway_result is not None else (result.tool_call.name if result.tool_call else None),
+    }
     return payload
+
+
+def _text_to_markdown(text: str | None) -> str:
+    """Wrap plain agent prose so the cockpit still renders it as a card."""
+    if not text:
+        return ""
+    return "\n".join(f"{line}" for line in str(text).splitlines())
 
 
 def _print_json(payload: dict[str, Any]) -> None:

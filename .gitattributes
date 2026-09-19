@@ -1,0 +1,17 @@
+# Reviewability: machine-generated evidence collapses itself on GitHub, hand-written
+# source stays diffable. The eval report is one `python -m poc.harness run` away, so a
+# 15k-line JSON churn should never be what a reviewer reads.
+03-poc-src/data/eval_report.json linguist-generated=true
+03-poc-src/data/eval_report_live_model.json linguist-generated=true
+
+# Binary stores and generated sidecars: never line-diffed.
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*-wal binary
+*-shm binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary

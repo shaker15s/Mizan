@@ -87,9 +87,10 @@ agent-native-erp/
 │   │   ├── main.py                 #    الـ CLI (عربي تفاعلي)
 │   │   ├── web_server.py           #    خادم الـ Web Cockpit (zero-dep)
 │   │   ├── db/init.py              #    مهيئ مخزن SQLite (WAL)
-│   │   └── web/                    #    واجهة Daylight (HTML/JS/CSS)
-│   ├── tests/                      #    341 test — 336 passed ✅ / 5 skipped
-│   ├── poc/tests/                  #    run_eval.py + verify_audit.py
+│   │   └── web/                    #    الكوكبت: app.js + ui.js + markdown.js + styles.css (ESM بدون CDN)
+│   ├── harness/                    #    ⭐ eval harness v2 (cases/environment/graders/metrics/report/render/cli)
+│   ├── tests/                      #    447 test — 442 passed ✅ / 5 skipped (منهم test_harness + test_settings + test_simulated_intent)
+│   ├── poc/tests/                  #    run_eval.py (shim للـ harness v2) + verify_audit.py
 │   ├── tools/                      #    Odoo smoke test + نتائجه
 │   ├── data/                       #    poc_gateway.db + تقييمات + tmp files
 │   ├── docker-compose.yml          #    Odoo 19 + PostgreSQL 15
@@ -205,14 +206,18 @@ Odoo 19 Community (Docker, localhost:8069)
 
 ## 8) الـ Web Cockpit (واجهة النهارية) 🖥️
 
-- **خادم:** `ThreadingHTTPServer` zero-dependency (مكتبة stdlib فقط) — port 8080
-- **الواجهة:** Tailwind CDN + Cairo/IBM Plex Arabic + JetBrains Mono — RTL كامل
+- **خادم:** `ThreadingHTTPServer` zero-dependency (stdlib فقط) — port 8080 — ETag + gzip + CSP صارم + تقييد داخل web root
+- **الواجهة:** 4 ملفات ESM بدون أي build وبدون CDN — `index.html` (هيكل) · `styles.css` (نظام تصميم RTL properties + dark/light + reduced-motion) · `ui.js` (مكوّنات DOM) · `markdown.js` (Markdown → DOM بأمان، بدون innerHTML) · `app.js` (الحالة والتدفق)
+- **الخطوط:** Stack عربي/لاتيني من نظام التشغيل (Noto Naskh/Geeza/Segoe UI + ui-monospace) — مفيش طلب شبكة للخطوط = نفس الشكل أوفلاين؛ `tabular-nums` للأرقام وعزل LTR للـ IDs
 - **الـ APIs:**
-  - `GET /api/health` · `/api/telemetry` (Odoo online, circuit breaker, model, security) · `/api/tools` · `/api/audit` (chain validity)
-  - `POST /api/chat` · `/api/confirm` · `/api/decline` · `/api/test/replay` (محاكاة هجوم تكرار)
+  - `GET /api/health` · `/api/telemetry` · `/api/tools` · `/api/audit` (chain validity + فلترة) · **`/api/settings`** (manifest كامل: 36 مفتاح بـ type/min/max/choices/secrets) · **`/api/commands`** · **`/api/integrations`** · **`/api/sessions`** · **`/api/greeting`**
+  - `POST /api/chat` · **`/api/chat/stream`** (SSE: `stage`/`delta`/`answer`/`done`/`error`) · `/api/confirm` · `/api/decline` · `/api/amend` · `/api/settings` · `/api/settings/reset` · `/api/integrations/test` · `/api/test/replay`
+  - **إصلاح بروتوكولي (19 سبتمبر):** الـ SSE كان بيتقال `Connection: keep-alive` على HTTP/1.1 من غير chunked ⇒ الجسم ما بخلصش والعميل بيفضل مستني للأبد؛ بقى `Connection: close` + العميل بيوقف عند `done` و بيرجع للـ buffered endpoint بس لو مفيش أي stage وصل (عشان ما نعيدش نشر طلب كتابة ممكن يكون اتنفذ)
 - **المكونات:**
-  - دردشة مع بطاقات نتائج (جداول عملاء / كروت منتجات بمؤشرات مخزون / تفاصيل أوردر بشريط مراحل)
-  - **بطاقة تأكيد تفاعلية:** كاونتن داون 60 ثانية + تعديل كمية + اعتماد/رفض
+  - دردشة بتعرض **`Answer` object** كما هو: headline + KPIs + سيكشن (جدول/فيلدز/قائمة/خطوات/bars) + تحليل + notices + next steps + governance footer — والكارت والـ Markdown من نفس المصدر (مستحيل يختلفوا)
+  - **⌘K command palette** (أوامر + إعدادات + إجراءات) · **slash palette** حي جوه البوكس بيكمّل `/search customer <نص>` وبيخلّي الـ placeholder متحدد جاهز للكتابة فوقه · تصدير CSV لكل جدول · نسخ Markdown/نص · ثيم فاتح/غامق · اختصارات قابلة للتحرير (بتتخزن محليًا)
+  - الشريط الجانبي: السياق (جلسة/محول/بث) · الأدوات (عقود + schemas + زر جرّب) · التدقيق (سلسلة + تفاصيل كل كتلة) · التكاملات (dry-run/حقيقي + HMAC) · الإعدادات (diff ثم apply، reset لكل مفتاح)
+  - **بطاقة توقيع تفاعلية:** كاونتن داون بياخد الـ TTL من `governance.confirm_ttl_seconds` (مش مكتوب على طول) + تعديل كمية بيبعت `arguments` كاملة لـ `/api/amend` + اعتماد/رفض + رابط لكتلة التدقيق
   - **مسار الأمان 8 مراحل** (stepper animation حي)
   - درج سجل التدقيق التشفيري + مودال عقود الأدوات
   - **تصدير CSV** + نسخ الملخص (تحسينات Consortium)
@@ -223,8 +228,12 @@ Odoo 19 Community (Docker, localhost:8069)
 
 ## 9) الاختبارات والتقييم (Tests & Live Evaluation) 🧪
 
-### الحالة الحقيقية (اتحققت منها بنفسي — آخر تشغيل 17 سبتمبر)
-- **pytest:** ✅ **351 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — 23.8 ثانية (+15 test جديد: normalization ladder + tool_choice)
+### الحالة الحقيقية (اتحققت منها بنفسي — آخر تشغيل 19 سبتمبر)
+- **pytest:** ✅ **442 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — ~10 ثانية (+ harness v2 self-tests، +32 لنية المحرك offline، +23 لـ settings store اللي كان من غير أي تغطية)
+- **eval harness v2 (deterministic، أوفلاين، بدون مفاتيح):** ✅ **50/50 · verdict PASS · exit 0** · 93 تنفيذ · unauthorized 0 · duplicates 0 · audit 100% · chain valid · structured 100% · reasoning leaks 0 · read p95 ≈ 5ms · write p95 ≈ 17ms
+- **eval harness v2 (`--mode simulated`):** ✅ tool selection 100% · parameter accuracy 100% · outcome accuracy 100% (دي المقاييس الوحيدة اللي ليها معنى أوفلاين؛ في الـ deterministic بتطبع N/A عمدًا)
+- **Cockpit headless smoke (`tools/frontend_smoke.mjs`):** ✅ **55/55** على jsdom + سيرفر حي + mock Odoo (`tools/mock_odoo.py`) — من الإرسال للـ SSE للتوقيع للتعديل للتنفيذ لكتلة التدقيق
+- **التوثيق:** `03-poc-src/HARNESS.md` (إزاي تقيس وإزاي تضيف حالة) · `CHANGELOG.md` · `TECHNICAL_DESIGN.md` (invariants + خريطة)
 - **ملفات الاختبار:** ~20 ملف: gateway, idempotency, confirmation, authz, audit_store, tool_contracts, odoo_client, llm, errors, verification, normalization_gateway (جديد), tool_choice (جديد), scenarios (golden path, security, errors), phase regressions
 - **استيراد scanner + env-scan + secret-leak scan:** اختبارات من الطبقة الأولى
 
