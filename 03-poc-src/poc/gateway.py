@@ -173,6 +173,23 @@ class _Context:
     odoo_client: Any = None
 
 
+def _audit_provenance(receipt: Any) -> dict[str, Any]:
+    """Traceability fields a caller needs to point at the audit row it created.
+
+    The cockpit shows these on the executed card, and an operator reconciling a
+    write by hand starts from exactly this pair (audit id + verify request id).
+    """
+    if not isinstance(receipt, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    audit_id = receipt.get("audit_id")
+    if isinstance(audit_id, int) and not isinstance(audit_id, bool):
+        out["audit_id"] = audit_id
+    request_id = receipt.get("request_id")
+    if isinstance(request_id, str) and request_id:
+        out["request_id"] = request_id
+    return out
+
 class ToolGateway:
     """Single server-side authorization and control-plane boundary."""
 
@@ -184,6 +201,7 @@ class ToolGateway:
         audit_store: AuditStore | None = None,
         confirmation_store: ConfirmationStore | None = None,
         db_path: Path = DEFAULT_DB_PATH,
+        confirm_ttl_seconds: int | None = None,
     ) -> None:
         self.registry = registry or get_registry()
         self.policy_engine = policy_engine or PolicyEngine()
@@ -193,6 +211,7 @@ class ToolGateway:
             db_path=db_path,
             registry=self.registry,
             policy_engine=self.policy_engine,
+            expiry_seconds=confirm_ttl_seconds,
         )
         self.audit_store.initialize()
 
@@ -301,12 +320,14 @@ class ToolGateway:
         user_id: str = "",
         tenant_id: str = "",
         execution_id: str | None = None,
+        audit_id: int | None = None,
+        request_id: str = "",
     ) -> GatewayResult:
         return GatewayResult(
             status=status,
             error_code=error_code,
             reason=reason,
-            request_id="",
+            request_id=request_id,
             user_id=user_id,
             tenant_id=tenant_id,
             tool_name="sales.order.create",
@@ -315,7 +336,7 @@ class ToolGateway:
             idempotency_key=idempotency_key,
             execution_id=execution_id,
             result=result,
-            audit_id=None,
+            audit_id=audit_id,
             requires_confirmation=False,
             structured_error_override=structured_error,
         )
@@ -445,7 +466,7 @@ class ToolGateway:
                     "error_code": structured.code,
                     "external_record_id": None,
                 }
-                self.audit_store.append(
+                receipt = self.audit_store.append(
                     self._verification_audit_record(record, arguments_for_audit, verification)
                 )
                 return self._empty_result(
@@ -455,6 +476,7 @@ class ToolGateway:
                     structured_error=structured,
                     user_id=user_id,
                     tenant_id=tenant_id,
+                    **_audit_provenance(receipt)
                 )
             # Odoo's own validation rejection (422) happens before any record
             # is written; treat it as a clean not-committed failure.
@@ -516,7 +538,7 @@ class ToolGateway:
                 external_record_id=verification["external_record_id"],
                 reconciliation=verification["reconciliation"],
             )
-        self.audit_store.append(
+        receipt = self.audit_store.append(
             self._verification_audit_record(record, arguments_for_audit, verification)
         )
         return self._empty_result(
@@ -529,6 +551,7 @@ class ToolGateway:
             user_id=user_id,
             tenant_id=tenant_id,
             execution_id=record.execution_id,
+            **_audit_provenance(receipt)
         )
 
     def confirm_and_execute(
@@ -1171,6 +1194,9 @@ def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict
                 "name": record.get("name"),
                 "email": record.get("email"),
                 "phone": record.get("phone"),
+                "street": record.get("street"),
+                "city": record.get("city"),
+                "credit_limit": record.get("credit_limit"),
             }
             for record in records
         ]
@@ -1183,6 +1209,9 @@ def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict
             "email": record.get("email"),
             "phone": record.get("phone"),
             "street": record.get("street"),
+            "city": record.get("city"),
+            "credit_limit": record.get("credit_limit"),
+            "vat": record.get("vat"),
         }
         return {"success": True, "customer": customer}
     if tool_name == "product.search":
@@ -1190,6 +1219,7 @@ def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict
             {
                 "id": record.get("id"),
                 "name": record.get("name"),
+                "default_code": record.get("default_code"),
                 "list_price": record.get("list_price"),
                 "qty_available": record.get("qty_available"),
             }
@@ -1211,6 +1241,9 @@ def _shape_read_result(tool_name: str, records: list[Mapping[str, Any]]) -> dict
             "partner_name": partner_name,
             "state": record.get("state"),
             "amount_total": record.get("amount_total"),
+            "amount_untaxed": record.get("amount_untaxed"),
+            "date_order": record.get("date_order"),
+            "client_order_ref": record.get("client_order_ref"),
         }
         return {"success": True, "order": order}
     return {"success": True, "records": list(records)}

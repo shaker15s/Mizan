@@ -9,6 +9,15 @@ data/*.db-shm
 *.db-wal
 *.db-shm
 
+# Operator settings overlay — may hold API keys saved from the settings panel
+data/settings.json
+
+# Generated eval reports (regenerate with: python -m poc.harness)
+data/reports/
+
+# Dev-only frontend smoke test deps (tools/frontend_smoke.mjs)
+node_modules/
+
 # Python
 __pycache__/
 *.py[cod]

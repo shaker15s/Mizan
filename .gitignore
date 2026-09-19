@@ -1,0 +1,26 @@
+# --- local state that must never reach the repo ---------------------------
+.env
+.env.*
+!.env.example
+*.tmp
+*~
+
+# --- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- runtime data (gateway store, operator overlay, generated reports) -----
+*.db
+*.db-wal
+*.db-shm
+03-poc-src/data/settings.json
+03-poc-src/data/reports/
+
+# --- node (dev-only tooling: tools/frontend_smoke.mjs) ---------------------
+node_modules/
+package-lock.json

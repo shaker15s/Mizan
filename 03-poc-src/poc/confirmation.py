@@ -140,10 +140,14 @@ class ConfirmationStore:
         db_path: Path = DEFAULT_DB_PATH,
         registry: ToolRegistry | None = None,
         policy_engine: PolicyEngine | None = None,
+        expiry_seconds: int | None = None,
     ) -> None:
         self.db_path = db_path
         self.registry = registry or get_registry()
         self.policy_engine = policy_engine or PolicyEngine()
+        # Operators may shorten/lengthen the signature window at runtime; the
+        # default stays the pinned design constant so audits remain comparable.
+        self.expiry_seconds = int(expiry_seconds) if expiry_seconds else CONFIRMATION_EXPIRY_SECONDS
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
@@ -176,7 +180,7 @@ class ConfirmationStore:
         operation_hash = compute_operation_hash(tool_name, tool_version, arguments, user_id, tenant_id, created_at)
         proposal_id = str(uuid.uuid4())
         idempotency_key = compute_idempotency_key(tenant_id, user_id, tool_name, arguments)
-        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=CONFIRMATION_EXPIRY_SECONDS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=self.expiry_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")

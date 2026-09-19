@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master, main]
 
+env:
+  POC_USER_ID: sales_user@test
+  TENANT_ID: poc_tenant_001
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -22,3 +26,60 @@ jobs:
       - run: pip install -r requirements.txt
       # The 5 integration tests auto-skip without a live Odoo instance.
       - run: pytest tests/ -q
+      - name: Harness self-check (dataset, registry, thresholds, seeds)
+        run: PYTHONPATH=. python -m poc.harness doctor
+      # The number that must never move. Exit code 1 == a gate regressed → the PR is blocked.
+      - name: Eval harness (deterministic, gated, offline)
+        run: PYTHONPATH=. python -m poc.harness --mode deterministic --no-repeat --format console --format md --format json
+      - name: Eval harness (offline rule engine — grades intent extraction itself)
+        run: PYTHONPATH=. python -m poc.harness --mode simulated --format console
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mizan-eval-reports
+          path: 03-poc-src/data/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  cockpit-ui:
+    # The frontend has no build step, so it is tested the same way a user uses it:
+    # real server, real SSE, real DOM — driven by tools/frontend_smoke.mjs.
+    name: Cockpit smoke (jsdom, live server, mock ERP)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 03-poc-src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: 03-poc-src/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements.txt
+      - name: Start mock ERP + cockpit
+        run: |
+          PYTHONPATH=. nohup python tools/mock_odoo.py --port 8069 --quiet >/tmp/mock-odoo.log 2>&1 &
+          PYTHONPATH=. ODOO_URL=http://127.0.0.1:8069 ODOO_DATABASE=poc_test \
+            ODOO_API_KEY_SALES_USER=mock-key GATEWAY_DB_PATH=data/ci_cockpit.db \
+            nohup python -m poc.web_server --port 8080 --simulate --no-browser >/tmp/cockpit.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          echo "--- cockpit log ---"; cat /tmp/cockpit.log; echo "--- mock log ---"; cat /tmp/mock-odoo.log
+          exit 1
+      - name: Run headless UI smoke
+        working-directory: 03-poc-src/tools
+        run: |
+          npm install --silent --no-fund --no-audit jsdom
+          node frontend_smoke.mjs
+      - name: Server logs on failure
+        if: failure()
+        run: |
+          echo "--- cockpit ---"; cat /tmp/cockpit.log
+          echo "--- mock odoo ---"; cat /tmp/mock-odoo.log
