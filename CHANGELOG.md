@@ -75,8 +75,19 @@ the command that proves it.
 - The cockpit dropped Tailwind-CDN + Google Fonts for a self-contained stylesheet with
   an Arabic-metric type scale (16–18px body, 1.75 leading, zero letter-spacing, tabular
   numerals, dual-script stacks) so it renders correctly offline and in RTL by default.
-- CI runs the gated deterministic harness and the headless cockpit smoke alongside
-  pytest.
+- **CI — queued, not merged.** `.github/workflows/ci.yml` gains `harness doctor`, a gated
+  deterministic run (a gate failure exits 1 → the PR is blocked), the simulated mode, a report
+  artifact, and a `cockpit-ui` job that boots `tools/mock_odoo.py` + the real server and runs
+  `node tools/frontend_smoke.mjs`. It could not be pushed from this environment: GitHub refuses
+  any App-authored commit that touches `.github/workflows/**` without the `workflows`
+  permission (the contents API returns 403 too). The file is intact in commit `497f76d` — apply
+  it with `git checkout 497f76d -- .github/workflows/ci.yml` once the App is granted that
+  permission (or commit it as a human, which is enough on its own). Until then, run the two
+  gates locally:
+  ```bash
+  cd 03-poc-src && PYTHONPATH=. python -m poc.harness --mode deterministic --no-repeat
+  PYTHONPATH=. python -m poc.harness doctor
+  ```
 
 ## [2026-09-17] — normalization ladder, FORCE_TOOL_CHOICE, Arabic fonts, voice input
 
