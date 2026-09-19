@@ -93,6 +93,11 @@ _GROUP_LABELS: dict[str, tuple[str, str]] = {
 
 
 def _s(key: str, group: str, label: str, default: Any, **kw: Any) -> SettingSpec:
+    # ``type="secret"`` *is* secret. Deriving the flag here (instead of trusting a second
+    # keyword per spec) is what keeps masking, the password control, and non-persistence
+    # from ever disagreeing with the declared type.
+    if kw.get("type") == TYPE_SECRET:
+        kw["secret"] = True
     return SettingSpec(key=key, group=group, label_ar=label, default=default, type=kw.pop("type", TYPE_STR), **kw)
 
 
@@ -129,7 +134,7 @@ _SPECS: tuple[SettingSpec, ...] = (
     _s("agent.narrative_composer", "agent", "صياغة تحليلية بعد التنفيذ", True, type=TYPE_BOOL,
        help_ar="استدعاء ثانٍ للنموذج يحوّل نتيجة البوابة إلى تحليل مالي/تشغيلي مُبثّل على الطائر."),
     _s("agent.max_input_chars", "agent", "أقصى طول للرسالة", 2000, type=TYPE_INT, min_value=200, max_value=8000),
-    _s("agent.slash_commands", "agent", "أوامر \/ المباشرة", True, type=TYPE_BOOL,
+    _s("agent.slash_commands", "agent", "أوامر / المباشرة", True, type=TYPE_BOOL,
        help_ar="/customer محمد — تنفيذ فوري عبر البوابة بدون استدعاء نموذج (صفر تكلفة، صفر انتظار)."),
     # --- governance -----------------------------------------------------------
     _s("governance.confirm_ttl_seconds", "governance", "صلاحية التأكيد (ثانية)", 300, type=TYPE_INT,
@@ -205,6 +210,18 @@ def _env_default(spec: SettingSpec) -> Any:
         except ValueError:
             return None
     return raw
+
+
+def baseline_value(spec: SettingSpec) -> Any:
+    """What the process would use for `spec` if no operator had edited it.
+
+    That is the env/deploy value when one is configured, otherwise the pinned
+    spec default — the thing "reset" must return to and what the UI marks as
+    untouched. (Reset previously jumped to ``spec.default`` and could silently
+    undo a server owner's ``ODOO_URL``/``--simulate`` startup choice.)
+    """
+    env_value = _env_default(spec)
+    return spec.default if env_value is None else env_value
 
 
 def _coerce(spec: SettingSpec, value: Any) -> Any:
@@ -297,7 +314,11 @@ class SettingsStore:
         errors: dict[str, str] = {}
         for key, value in values.items():
             spec = SPEC_BY_KEY.get(key)
-            if spec is None or spec.secret:
+            if spec is None:
+                continue
+            if spec.secret:
+                if self.persist_secrets and isinstance(value, str) and value:
+                    self._secrets[key] = value
                 continue
             try:
                 self._values[key] = _coerce(spec, value)
@@ -309,13 +330,19 @@ class SettingsStore:
     def _persist(self) -> None:
         if not self.path.parent.exists():
             return
+        values = {
+            key: value
+            for key, value in self._values.items()
+            if not SPEC_BY_KEY[key].secret
+        }
+        if self.persist_secrets:
+            # Opt-in only. The flag exists for packaged deployments that need an
+            # operator-entered key to survive a restart; it stays off by default so a
+            # repo checkout can never end up holding a credential.
+            values.update(self._secrets)
         payload = {
             "version": self._version,
-            "values": {
-                key: value
-                for key, value in self._values.items()
-                if not SPEC_BY_KEY[key].secret or self.persist_secrets
-            },
+            "values": values,
             "history": self._history[-MAX_HISTORY:],
         }
         try:
@@ -382,7 +409,10 @@ class SettingsStore:
                     continue
                 if self._values.get(key) != coerced:
                     staged[key] = coerced
-            if errors and not staged and not staged_secrets:
+            if not staged and not staged_secrets:
+                # Nothing actually changed (no-op save, or a rejected/cleared secret):
+                # a version bump and an empty history row here would make the UI claim
+                # an edit that never happened.
                 return {}, errors
             self._values.update(staged)
             self._secrets.update(staged_secrets)
@@ -416,8 +446,9 @@ class SettingsStore:
                 if spec.secret:
                     self._secrets.pop(key, None)
                     continue
-                self._values[key] = spec.default
-                restored[key] = spec.default
+                baseline = baseline_value(spec)
+                self._values[key] = baseline
+                restored[key] = baseline
             self._version += 1
             self._history.append({"ts": int(time.time()), "actor": actor, "changed": [f"reset:{k}" for k in targets]})
             self._history = self._history[-MAX_HISTORY:]
@@ -443,7 +474,7 @@ class SettingsStore:
                 spec.group,
                 {"id": spec.group, "label": label, "icon": icon, "items": []},
             )
-            raw = self._secrets.get(spec.key) if spec.secret else self._values.get(spec.key, spec.default)
+            raw = self.secret(spec.key) if spec.secret else self._values.get(spec.key, spec.default)
             item: dict[str, Any] = {
                 "key": spec.key,
                 "label": spec.label_ar,
@@ -451,7 +482,7 @@ class SettingsStore:
                 "type": spec.type,
                 "control": spec.ui_control,
                 "value": mask_secret(raw) if spec.secret else raw,
-                "is_default": (raw in (None, "", {}) if not spec.secret else not raw),
+                "is_default": (not raw) if spec.secret else (raw == baseline_value(spec)),
                 "default": spec.default,
                 "restart_required": spec.restart_required,
                 "tags": list(spec.tags),
@@ -480,7 +511,7 @@ class SettingsStore:
     def describe(self) -> dict[str, Any]:
         """Flat, masked view used by telemetry."""
         return {
-            spec.key: (mask_secret(self._secrets.get(spec.key)) if spec.secret else self._values.get(spec.key, spec.default))
+            spec.key: (mask_secret(self.secret(spec.key)) if spec.secret else self._values.get(spec.key, spec.default))
             for spec in _SPECS
         }
 

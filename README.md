@@ -8,7 +8,7 @@
 *(An Arabic-first agentic ERP where AI executes real business operations through a deterministic, permission-aware, audited gateway — not a chatbot.)*
 
 [![CI](https://img.shields.io/badge/CI-passing-10b981?style=flat-square)](https://github.com/shaker15s/agent-native-erp/actions)
-[![Tests](https://img.shields.io/badge/tests-419_passing-blue?style=flat-square)](03-poc-src/tests/)
+[![Tests](https://img.shields.io/badge/tests-442_passing-blue?style=flat-square)](03-poc-src/tests/)
 [![Eval](https://img.shields.io/badge/eval_harness-50%2F50_PASS-10b981?style=flat-square)](03-poc-src/HARNESS.md)
 [![Live Eval](https://img.shields.io/badge/live_eval-GO_WITH_CONDITIONS-f59e0b?style=flat-square)](02-poc/LIVE_MODEL_EVALUATION_REPORT.md)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](03-poc-src/requirements.txt)
@@ -61,7 +61,7 @@ PYTHONPATH=. POC_USER_ID=sales_user@test ODOO_URL=http://127.0.0.1:8069 \
 Run the tests and the eval gate:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q                     # 419 passed, 5 skipped (integration auto-skip)
+.venv/bin/python -m pytest tests/ -q                     # 442 passed, 5 skipped (integration auto-skip)
 PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat   # 50/50 · exit 0
 ```
 
@@ -118,7 +118,7 @@ Full detail in [CHANGELOG.md](CHANGELOG.md). The parts a reviewer cares about:
 | **Result card** | real card UI in-thread: signature card with countdown + quantity amend, audit id link, CSV export, copy-as-markdown | a signed write is reviewable before it becomes a record |
 | **Eval** | harness rebuilt: hermetic per-case ERP, stable failure tags, latency p95, `pass^k`, RTL HTML report, baseline diff, exit-code gates | CI can block on a regression, not on a vibe |
 | **Streaming** | SSE now terminates (HTTP/1.1 + `Connection: close`) and the client stops at `done` | the send button used to hang forever mid-stream |
-| **Settings** | the panel renders the server's own settings manifest — all 36 typed keys, masked secrets, per-key reset, hot-applied | "settings control anything" without a second source of truth |
+| **Settings** | the panel renders the server's own settings manifest — all 36 typed keys, hot-applied, with secrets masked on every read path and never persisted | "settings control anything" without a second source of truth (and without leaking an API key) |
 | **Frontend** | 4 vanilla ES modules, zero CDN, Arabic-metric type scale, RTL-first with LTR isolates, command palette, `prefers-reduced-motion` | offline-safe, no supply-chain, 55 headless DOM checks in CI |
 
 **Typography note:** the earlier "Alexandria + Readex Pro over Google Fonts" experiment

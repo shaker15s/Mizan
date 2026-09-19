@@ -36,8 +36,8 @@ the command that proves it.
   harness seeds, so the cockpit demos the real gateway path without Odoo) and
   `tools/frontend_smoke.mjs` (55 headless checks over the live DOM: stream → card →
   sign → amend → execute → audit).
-- **Tests** — `tests/test_harness.py` (36) and `tests/test_simulated_intent.py` (32)
-  added; suite is now **419 passed, 5 skipped**.
+- **Tests** — `tests/test_harness.py` (36), `tests/test_simulated_intent.py` (32) and
+  `tests/test_settings.py` (23) added; suite is now **442 passed, 5 skipped**.
 
 ### Fixed
 - **SSE turns never ended** — the cockpit streams over HTTP/1.1 without chunked

@@ -89,7 +89,7 @@ agent-native-erp/
 │   │   ├── db/init.py              #    مهيئ مخزن SQLite (WAL)
 │   │   └── web/                    #    الكوكبت: app.js + ui.js + markdown.js + styles.css (ESM بدون CDN)
 │   ├── harness/                    #    ⭐ eval harness v2 (cases/environment/graders/metrics/report/render/cli)
-│   ├── tests/                      #    424 test — 419 passed ✅ / 5 skipped (منهم test_harness + test_simulated_intent)
+│   ├── tests/                      #    447 test — 442 passed ✅ / 5 skipped (منهم test_harness + test_settings + test_simulated_intent)
 │   ├── poc/tests/                  #    run_eval.py (shim للـ harness v2) + verify_audit.py
 │   ├── tools/                      #    Odoo smoke test + نتائجه
 │   ├── data/                       #    poc_gateway.db + تقييمات + tmp files
@@ -229,7 +229,7 @@ Odoo 19 Community (Docker, localhost:8069)
 ## 9) الاختبارات والتقييم (Tests & Live Evaluation) 🧪
 
 ### الحالة الحقيقية (اتحققت منها بنفسي — آخر تشغيل 19 سبتمبر)
-- **pytest:** ✅ **419 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — ~10 ثانية (+ harness v2 self-tests و +32 test لنية المحرك offline)
+- **pytest:** ✅ **442 passed, 5 skipped** (الـ 5 integration محتاجة Odoo حي) — ~10 ثانية (+ harness v2 self-tests، +32 لنية المحرك offline، +23 لـ settings store اللي كان من غير أي تغطية)
 - **eval harness v2 (deterministic، أوفلاين، بدون مفاتيح):** ✅ **50/50 · verdict PASS · exit 0** · 93 تنفيذ · unauthorized 0 · duplicates 0 · audit 100% · chain valid · structured 100% · reasoning leaks 0 · read p95 ≈ 5ms · write p95 ≈ 17ms
 - **eval harness v2 (`--mode simulated`):** ✅ tool selection 100% · parameter accuracy 100% · outcome accuracy 100% (دي المقاييس الوحيدة اللي ليها معنى أوفلاين؛ في الـ deterministic بتطبع N/A عمدًا)
 - **Cockpit headless smoke (`tools/frontend_smoke.mjs`):** ✅ **55/55** على jsdom + سيرفر حي + mock Odoo (`tools/mock_odoo.py`) — من الإرسال للـ SSE للتوقيع للتعديل للتنفيذ لكتلة التدقيق
