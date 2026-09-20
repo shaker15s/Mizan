@@ -40,6 +40,7 @@ IDENTITY_MISMATCH = "identity_mismatch"
 TENANT_MISMATCH = "tenant_mismatch"
 TOOL_MISSING = "tool_missing"
 VERSION_MISMATCH = "version_mismatch"
+PROPOSAL_VERSION_MISMATCH = "proposal_version_mismatch"
 POLICY_DENIED = "policy_denied"
 NOT_CONFIRMATION_REQUIRED = "not_confirmation_required"
 DECLINED = "declined"
@@ -96,6 +97,8 @@ class Proposal:
     expires_at: str
     confirmed_at: str | None = None
     executed_at: str | None = None
+    proposal_version: int = 1
+    superseded_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -184,9 +187,15 @@ class ConfirmationStore:
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
+            # Ensure schema has proposal_version column (for DBs created before Phase 4).
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(proposals)")}
+            if "proposal_version" not in cols:
+                conn.execute("ALTER TABLE proposals ADD COLUMN proposal_version INTEGER NOT NULL DEFAULT 1")
+            if "superseded_by" not in cols:
+                conn.execute("ALTER TABLE proposals ADD COLUMN superseded_by TEXT")
             conn.execute(
-                "INSERT INTO proposals (proposal_id, tool_name, tool_version, arguments, operation_hash, user_id, tenant_id, state, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (proposal_id, tool_name, tool_version, json.dumps(arguments, ensure_ascii=False), operation_hash, user_id, tenant_id, PROPOSED, created_at, expires_at),
+                "INSERT INTO proposals (proposal_id, proposal_version, tool_name, tool_version, arguments, operation_hash, user_id, tenant_id, state, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (proposal_id, 1, tool_name, tool_version, json.dumps(arguments, ensure_ascii=False), operation_hash, user_id, tenant_id, PROPOSED, created_at, expires_at),
             )
             conn.commit()
         finally:
@@ -195,6 +204,7 @@ class ConfirmationStore:
             proposal_id=proposal_id, tool_name=tool_name, tool_version=tool_version,
             arguments=arguments, operation_hash=operation_hash, user_id=user_id,
             tenant_id=tenant_id, state=PROPOSED, created_at=created_at, expires_at=expires_at,
+            proposal_version=1,
         )
         return CreationResult(status=APPROVED, proposal=proposal, error_code=None, reason="proposal_created")
 
@@ -214,7 +224,81 @@ class ConfirmationStore:
             tenant_id=row["tenant_id"], state=row["state"],
             created_at=row["created_at"], expires_at=row["expires_at"],
             confirmed_at=row["confirmed_at"], executed_at=row["executed_at"],
+            proposal_version=int(row["proposal_version"]) if "proposal_version" in row.keys() and row["proposal_version"] is not None else 1,
+            superseded_by=row["superseded_by"] if "superseded_by" in row.keys() else None,
         )
+
+    def create_successor_proposal(
+        self,
+        predecessor_id: str,
+        new_arguments: dict,
+        user_id: str,
+        tenant_id: str,
+    ) -> CreationResult:
+        """Create a new version of an existing proposal after user edits.
+
+        The predecessor is atomically marked as superseded (state=FAILED)
+        and superseded_by points to the new proposal. The new proposal
+        carries proposal_version = predecessor.proposal_version + 1 and a
+        fresh operation_hash (so any prior approval is invalidated — the
+        user must approve the new version).
+        """
+        predecessor = self.get_proposal(predecessor_id)
+        if predecessor is None:
+            return CreationResult(status=NOT_FOUND, proposal=None, error_code=NOT_FOUND, reason="proposal_not_found")
+        if predecessor.user_id != user_id or predecessor.tenant_id != tenant_id:
+            return CreationResult(status=IDENTITY_MISMATCH, proposal=None, error_code=_PERM_DENIED, reason="identity_mismatch")
+        if predecessor.state != PROPOSED:
+            return CreationResult(status=REPLAY, proposal=None, error_code=_REPLAY_CODE, reason=f"proposal_already_{predecessor.state}")
+        created = self.create_proposal(
+            tool_name=predecessor.tool_name,
+            tool_version=predecessor.tool_version,
+            arguments=dict(new_arguments),
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+        if created.proposal is None:
+            return created
+        new_version = predecessor.proposal_version + 1
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(proposals)")}
+            if "proposal_version" in cols:
+                conn.execute(
+                    "UPDATE proposals SET proposal_version = ?, state = 'failed' WHERE proposal_id = ?",
+                    (new_version, created.proposal.proposal_id),
+                )
+            if "superseded_by" in cols:
+                conn.execute(
+                    "UPDATE proposals SET state = 'failed', superseded_by = ? WHERE proposal_id = ?",
+                    (created.proposal.proposal_id, predecessor_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE proposals SET state = ? WHERE proposal_id = ?",
+                    (FAILED, predecessor_id),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        # Build a corrected Proposal instance with the bumped version.
+        import json as _json
+        bumped = Proposal(
+            proposal_id=created.proposal.proposal_id,
+            tool_name=created.proposal.tool_name,
+            tool_version=created.proposal.tool_version,
+            arguments=created.proposal.arguments,
+            operation_hash=created.proposal.operation_hash,
+            user_id=created.proposal.user_id,
+            tenant_id=created.proposal.tenant_id,
+            state=created.proposal.state,
+            created_at=created.proposal.created_at,
+            expires_at=created.proposal.expires_at,
+            proposal_version=new_version,
+            superseded_by=None,
+        )
+        return CreationResult(status=created.status, proposal=bumped, error_code=None, reason="proposal_version_created", idempotency_key=created.idempotency_key)
 
     def decline(self, proposal_id: str, user_id: str, tenant_id: str) -> ApprovalResult:
         """Atomically deny a proposed operation and preserve proposal binding."""

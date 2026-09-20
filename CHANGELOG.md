@@ -4,6 +4,80 @@ All notable changes to Mizan. Dates are Egyptian; the format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-ish, and every entry lists
 the command that proves it.
 
+## [2026-09-20] — phases 6–9: execution store, policy 2.0, evidence graph, API hardening
+
+### Added
+- **ExecutionStore** (`poc/execution/store.py`) — persistence for canonical state with event log replay; per-execution row + append-only events.
+- **Policy Engine 2.0** (`poc/policy_engine2.py`) — attribute-based decisions with `policy_version` + `policy_hash`, R0→allow, R1→allow, R2→self-confirm, R3→manager approval, R4→MFA/step-up. Backward-compatible with the legacy engine.
+- **Evidence event graph** (`poc/evidence.py`) — typed append-only evidence events (INTENT, PLAN, ENTITY_RESOLUTION, POLICY_DECISION, APPROVAL, LEASE, TOOL_CALL, ERP_REQUEST, ERP_RESPONSE, VERIFICATION, RECONCILIATION, USER_VISIBLE_CLAIM, STATE_TRANSITION) with SHA-256 hash chain (separate from audit_log). Provides `verify_chain()` and `for_execution()`.
+- **Web security middleware** (`poc/web_security.py`) and hardening:
+    - Strict CSP/HSTS/X-Frame-Options/X-Content-Type-Options/Referrer-Policy/Permissions-Policy applied to all responses.
+    - CORS is same-origin by default; dev mode reflects the origin; `MIZAN_ALLOWED_ORIGINS` allows explicit origins.
+    - Dev routes (`/api/test/*`, `/api/replay`, `/api/dev/*`, `/api/eval/*`, `/api/debug/*`) return 404 in production mode unless `MIZAN_DEV=1`.
+    - Request body size cap (default 512 KB).
+    - In-memory sliding-window rate limiter (default 120 req/min) with `X-RateLimit-*` headers and 429 responses.
+    - `Server: mizan` fingerprint removal.
+- **New tests:** `test_execution_store.py`, `test_policy_engine2.py`, `test_evidence_store.py`, `test_web_security.py` (13 tests).
+
+### Proof
+```
+$ PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
+494 passed, 5 skipped   (was 481 → +13 new; 0 regressions)
+$ PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat
+50/50 PASS · all safety gates green
+```
+
+## [2026-09-20] — phases 1–5: canonical state, typed action, proposal versioning, execution lease, risk
+
+### Added
+- **Mandatory architectural documentation** (`docs/`) — `CURRENT_STATE.md`,
+  `ARCHITECTURE_MAP.md`, `TRUST_BOUNDARY.md`, `CANONICAL_STATE_MACHINE.md`,
+  `HARNESS_ARCHITECTURE.md`, `SECURITY_CONTROL_MATRIX.md`, `TRACEABILITY_MATRIX.md`,
+  `MIGRATION_PLAN.md`, and `docs/adr/ADR-001..003`. All populated with verified
+  repository reality, not templates.
+- **Canonical Execution State Machine** (`poc/execution/state_machine.py`) — ONE
+  authoritative lifecycle (stage/status/security/final), enum-typed, event-driven,
+  immutable transitions with history. 60+ transitions cover happy path,
+  clarification, policy, approval, lease, execution, verification, retry,
+  ambiguity, reconciliation, compensation, quarantine, and terminals. Backward
+  compatibility via `project_to_gateway_status()` and `project_to_proposal_state()`.
+- **Typed Action Envelope** (`poc/execution/action.py`) — frozen dataclass
+  carrying actor (server-owned), versions, risk, idempotency binding; never
+  overwritten by model output.
+- **Proposal Versioning** (Phase 4) — `proposal_version` INTEGER column,
+  `superseded_by` pointer, `ConfirmationStore.create_successor_proposal()`
+  atomically marks old version failed/superseded and issues a new version with
+  a fresh operation_hash; prior approvals on superseded proposals are rejected.
+  `AgentRuntime.amend_proposal()` now uses successor creation.
+- **Execution Lease** (`poc/execution/lease.py`) — lease_id/owner/heartbeat/
+  payload_hash, acquire/heartbeat/complete/release/expire_stale, owner-gated
+  transitions, expired leases are superseded not double-reserved.
+- **Deterministic Risk Engine v1** (`poc/execution/risk.py`) — R0–R4 based on
+  readOnly/destructive/quantity thresholds; explains factors (precursor to
+  Policy 2.0 / ABAC).
+- **Evidence manifest** (`evidence/EVIDENCE_MANIFEST.json`) — every test/harness
+  run attributable to commit, Python version, OS, env, tool/policy/prompt/
+  harness versions, pass/fail/skip, artifacts, result hash.
+- **New tests:** `test_execution_state_machine.py` (22), `test_execution_lease.py` (8),
+  `test_risk_engine.py` (4), `test_proposal_versioning.py` (4).
+
+### Changed
+- **`poc/db/init.py`** — idempotent schema migrations: adds `proposal_version`
+  and `superseded_by` to `proposals` and creates the `execution_leases` table
+  on existing databases (no DROP, no data loss).
+- **`poc/confirmation.py`** — `Proposal` dataclass carries `proposal_version`
+  and `superseded_by`; `create_proposal` writes version=1; new successor method.
+
+### Proof
+```
+$ PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
+481 passed, 5 skipped   (previously 442 passed, 5 skipped; +39 new tests, 0 regressions)
+$ PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat
+50/50 PASS, all safety gates green
+```
+
+See `evidence/EVIDENCE_MANIFEST.json` EV-003, EV-004.
+
 ## [2026-09-19] — the integrated pass: answer quality, eval harness v2, cockpit rebuild
 
 ### Added
@@ -97,3 +171,53 @@ See `README.md` ("2026-09-17 Improvements") and `02-poc/POST_AUDIT_HARDENING_REP
 
 `02-poc/FINAL_AUDIT_REPORT.md`, `02-poc/HARDENING_PLAN.md`: fail-closed gateway,
 idempotency lifecycle, hash-chained audit, confirmation store.
+
+## [2026-09-20] — phase 10: React/TypeScript frontend scaffold
+
+### Added
+- **`frontend/`** — Vite + React 18 + TypeScript cockpit replacement for the legacy
+  `poc/web/` HTML/JS UI. Strict CSP (self-only) baked into `index.html`; same-origin
+  `/api` proxy to `http://127.0.0.1:8765` in dev, RTL Arabic-first layout.
+- Components: `ChatPanel`, `TelemetryStrip`, `ToolsPanel`, `AuditTrail`.
+- Typed API client (`src/api.ts`) and shared DTOs (`src/types.ts`) that track the
+  Python gateway contract exactly — the client never invents IDs or success state.
+- `npm run build` → `dist/` produces ~150 KB JS / 5.5 KB CSS gzipped; `tsc --noEmit`
+  passes cleanly.
+
+### Proof
+```
+$ cd frontend && npm run build
+✓ 36 modules transformed · dist/index.html 0.89 KB · built in 971 ms
+```
+Backend unchanged: 494 tests passed, harness 50/50 PASS.
+
+## [2026-09-20] — phase 5 complete: execution lease wired into gateway
+
+### Added
+- **Lease lifecycle inside `confirm_and_execute` / `execute_verified`:**
+    - Acquires a `LeaseStore` lease atomically before any ERP call, owner-tagged
+      with `gateway:<hostname>:<pid>`.
+    - Prevents double-execution when another concurrent worker already holds an
+      active lease for the same idempotency key (returns 409/IN_PROGRESS, Odoo
+      `create` is never invoked).
+    - Transitions the canonical state machine through
+      CONFIRMATION_APPROVED → LEASE_GRANTED → EXECUTION_STARTED →
+      VERIFICATION_STARTED → VERIFICATION_PASSED → SUCCESS_CONFIRMED
+      (or *_FAILURE / AMBIGUOUS_OUTCOME on error).
+    - Completes/releases/expires the lease on every exit path (success, hard
+      failure, retryable-before-write, ambiguous-after-write).
+- **Additional evidence events** on the confirmed-mutation path: APPROVAL, LEASE,
+  TOOL_CALL, ERP_REQUEST (product pre-check + sale.order.create), ERP_RESPONSE,
+  VERIFICATION, RECONCILIATION, USER_VISIBLE_CLAIM. Hash chain remains valid
+  (496 tests verify chain integrity end-to-end).
+- **Execution ID alignment:** `_process_mutating` now rebases the in-memory
+  `ExecutionState` onto the authoritative execution_id allocated by
+  `IdempotencyStore.reserve()` so evidence/leases/audit share one UUID.
+- **New test `tests/test_lease_in_gateway.py`** (2 tests): end-to-end lease
+  acquisition + evidence coverage, plus concurrent-lease duplicate-write block.
+
+### Proof
+```
+pytest tests/ -q       → 496 passed, 5 skipped (was 494 → +2)
+harness deterministic  → 50/50 PASS · 0 unauthorized · 0 duplicate · chain valid
+```

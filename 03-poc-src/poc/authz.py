@@ -162,6 +162,7 @@ class PolicyEngine:
         tenant_id = request.get("tenant_id")
         tool_name = request.get("tool_name")
         requested_version = request.get("tool_version")
+        arguments = request.get("arguments") or {}
 
         if not isinstance(user_id, str) or not user_id:
             return _denied(user_id, tenant_id, tool_name, requested_version, "malformed_request", RULE_MALFORMED_REQUEST)
@@ -196,6 +197,18 @@ class PolicyEngine:
             return _denied(user_id, tenant_id, tool_name, contract["tool_version"], "explicit_deny", RULE_EXPLICIT_DENY)
         if tool_name not in policy_user.allowed_tools:
             return _denied(user_id, tenant_id, tool_name, contract["tool_version"], "permission_denied", RULE_PERMISSION_DENIED)
+        # R3 large-quantity guard: any line with quantity >= 1000 requires manager
+        # escalation and is denied at the policy layer before reaching ERP.
+        if tool_name == "sales.order.create":
+            lines = (arguments or {}).get("lines") or []
+            try:
+                for line in lines:
+                    qty = line.get("quantity", 0)
+                    if isinstance(qty, (int, float)) and qty >= 1000:
+                        return _denied(user_id, tenant_id, tool_name, contract["tool_version"],
+                                       "large_quantity_requires_manager", "RULE_LARGE_QUANTITY")
+            except (TypeError, AttributeError):
+                pass
         if contract["readOnly"] is False or contract["requiresConfirmation"] is True:
             return PolicyDecision(
                 decision=CONFIRMATION_REQUIRED,

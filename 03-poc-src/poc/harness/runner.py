@@ -147,6 +147,12 @@ class Runner:
 
     def _client_for(self, case: Case) -> LLMClientProtocol:
         if self.options.mode == DETERMINISTIC:  # scripted from the expectation → never scored
+            if case.expected_tool is None or "text_only" in case.tags:
+                # Cases that expect no tool call (conversation, prompt-injection
+                # that must be refused, destructive unknown verbs): return a
+                # text-only response so the runtime replies without invoking
+                # anything. The grader then checks the gateway didn't write.
+                return FakeLLMClient(responses=[LLMResponse(text="محادثة نصية فقط — مفيش استدعاء لأداة.", tool_calls=())])
             return FakeLLMClient(responses=[LLMResponse(tool_calls=(_tool_call_for(case),))])
         return _InstrumentedLLM(self._base_client())
 

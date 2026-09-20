@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
+import socket
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -54,6 +56,27 @@ from poc.errors import (
     translate_odoo_exception,
 )
 from poc.verification import verify_sales_order_creation
+from poc.execution import (
+    Action,
+    Actor,
+    ExecutionState,
+    ExecutionStore,
+    RiskAssessment,
+    assess_risk,
+)
+from poc.execution.state_machine import (
+    ExecutionEvent,
+    ExecutionStage,
+    ExecutionStatus,
+    SecurityStatus,
+    INITIAL_STATE,
+    project_to_gateway_status,
+    new_execution_identity,
+    state_machine_version,
+)
+from poc.execution.lease import ExecutionLease, LeaseAlreadyHeldError, LeaseError, LeaseNotOwnedError, LeaseState, LeaseStore, LEASE_ACTIVE, LEASE_COMPLETED, LEASE_EXPIRED, LEASE_RELEASED
+from poc.evidence import EvidenceStore, EvidenceType
+from poc.policy_engine2 import PolicyDecision2, PolicyEngine2
 
 ACCEPTED = "accepted"
 DENIED = "denied"
@@ -165,12 +188,57 @@ class _Context:
     record: ToolGatewayRequest
     tool_call_id: str
     policy_decision: str = "denied"
+    policy_version: str | None = None
+    policy_hash: str | None = None
     idempotency_key: str | None = None
     execution_id: str | None = None
+    execution: ExecutionState | None = None
+    last_evidence_id: str | None = None
     replay_result: Mapping[str, Any] | None = None
     error_code: str | None = None
     requires_confirmation: bool = False
     odoo_client: Any = None
+    risk: RiskAssessment | None = None
+    lease_id: str | None = None
+
+    def ev(self, gateway: "ToolGateway", event_type: EvidenceType, payload: Mapping[str, Any]) -> str:
+        """Append an evidence event, chaining it to the last event in this context."""
+        evt = gateway.evidence_store.append(
+            event_type=event_type,
+            payload=dict(payload),
+            trace_id=self.record.request_id,
+            execution_id=self.execution_id,
+            parent_event_id=self.last_evidence_id,
+            actor_id=self.record.user_id,
+            tenant_id=self.record.tenant_id,
+            policy_version=getattr(self, "policy_version", None),
+            policy_hash=getattr(self, "policy_hash", None),
+            tool_name=self.record.tool_name,
+            tool_version=self.record.tool_version,
+            tool_call_id=self.tool_call_id,
+        )
+        self.last_evidence_id = evt.evidence_id
+        return evt.evidence_id
+
+    def apply(self, gateway: "ToolGateway", event: ExecutionEvent, *, reason: str = "", persist: bool = True) -> None:
+        """Apply a canonical state transition, persist it, and emit STATE_TRANSITION evidence."""
+        if self.execution is None:
+            return
+        prev_stage = self.execution.stage.value
+        next_state = self.execution.apply(event, actor=self.record.user_id, reason=reason)
+        self.execution = next_state
+        self.ev(gateway, EvidenceType.STATE_TRANSITION, {
+            "event": event.value,
+            "from_stage": prev_stage,
+            "to_stage": next_state.stage.value,
+            "status": next_state.status.value,
+            "security": next_state.security.value,
+            "final": next_state.final.value if next_state.final else None,
+            "reason": reason,
+            "state_machine_version": state_machine_version(),
+        })
+        if persist:
+            gateway.execution_store.save(next_state)
 
 
 def _audit_provenance(receipt: Any) -> dict[str, Any]:
@@ -197,14 +265,21 @@ class ToolGateway:
         self,
         registry: ToolRegistry | None = None,
         policy_engine: PolicyEngine | None = None,
+        policy_engine2: PolicyEngine2 | None = None,
         idempotency_store: IdempotencyStore | None = None,
         audit_store: AuditStore | None = None,
         confirmation_store: ConfirmationStore | None = None,
+        execution_store: ExecutionStore | None = None,
+        evidence_store: EvidenceStore | None = None,
+        lease_store: LeaseStore | None = None,
         db_path: Path = DEFAULT_DB_PATH,
         confirm_ttl_seconds: int | None = None,
+        lease_ttl_seconds: int = 300,
+        lease_heartbeat_seconds: int = 60,
     ) -> None:
         self.registry = registry or get_registry()
         self.policy_engine = policy_engine or PolicyEngine()
+        self.policy_engine2 = policy_engine2 or PolicyEngine2()
         self.idempotency_store = idempotency_store or IdempotencyStore(db_path)
         self.audit_store = audit_store or AuditStore(db_path)
         self.confirmation_store = confirmation_store or ConfirmationStore(
@@ -213,7 +288,19 @@ class ToolGateway:
             policy_engine=self.policy_engine,
             expiry_seconds=confirm_ttl_seconds,
         )
+        self.execution_store = execution_store or ExecutionStore(db_path)
+        self.evidence_store = evidence_store or EvidenceStore(db_path)
+        self.lease_store = lease_store or LeaseStore(
+            db_path=db_path,
+            ttl_seconds=lease_ttl_seconds,
+        )
+        self.lease_heartbeat_seconds = int(lease_heartbeat_seconds)
         self.audit_store.initialize()
+        # Evict any leases left dangling by a previous process (fail-safe on boot).
+        try:
+            self.lease_store.expire_stale()
+        except Exception:
+            pass
 
     def _build_odoo_payload(self, arguments: Mapping[str, Any], idempotency_key: str) -> list[dict[str, Any]]:
         order_lines = [
@@ -349,10 +436,28 @@ class ToolGateway:
         odoo_client: Any,
         tenant_id: str,
         user_id: str,
+        *,
+        _context: _Context | None = None,
+        _proposal_id: str | None = None,
+        _approval_id: str | None = None,
     ) -> GatewayResult:
-        """Execute the confirmed mutation, verify its ERP state, then persist."""
+        """Execute the confirmed mutation, verify its ERP state, then persist.
+
+        When `_context` is supplied (confirm path), we drive the canonical state
+        machine (LEASE_GRANTED→EXECUTING→VERIFYING→SUCCESS/FAILED/AMBIGUOUS) and
+        emit LEASE / TOOL_CALL / ERP_REQUEST / ERP_RESPONSE / VERIFICATION /
+        RECONCILIATION evidence events. Without `_context` (standalone/internal
+        calls) the method behaves exactly as before, preserving backward compat
+        for tests that invoke it directly.
+        """
+        ctx = _context
         record = self.idempotency_store.get(idempotency_key, tenant_id, user_id)
         if record is None or record.execution_id != execution_id or record.state != "pending":
+            if ctx is not None:
+                try:
+                    ctx.apply(self, ExecutionEvent.EXECUTION_HARD_FAILURE, reason="reservation_not_owned")
+                except Exception:
+                    pass
             return self._empty_result(
                 status=CONFLICT,
                 error_code=IDEMPOTENCY_CONFLICT,
@@ -365,13 +470,99 @@ class ToolGateway:
         create_attempted = False
         create_returned = False
         validation_rejected = False
+        lease: ExecutionLease | None = None
+
+        # ---- Acquire execution lease (Phase 5) --------------------------------
+        if ctx is not None:
+            # If a lease is already active for this key we're in a concurrent
+            # confirmation race. The first owner wins; everyone else is told
+            # to wait (fail-closed — no double-execution).
+            active = self.lease_store.active_for_key(idempotency_key)
+            if active is not None and active.execution_id != execution_id:
+                if ctx is not None:
+                    try:
+                        ctx.apply(self, ExecutionEvent.LEASE_EXPIRED, reason="lease_already_held")
+                    except Exception:
+                        pass
+                return self._empty_result(
+                    status=IN_PROGRESS,
+                    error_code=IDEMPOTENCY_IN_PROGRESS,
+                    reason="execution_lease_already_held",
+                    user_id=user_id, tenant_id=tenant_id,
+                    execution_id=execution_id,
+                    idempotency_key=idempotency_key,
+                )
+            owner = f"gateway:{socket.gethostname()}:{os.getpid()}"
+            try:
+                lease = self.lease_store.acquire(
+                    execution_id=execution_id,
+                    idempotency_key=idempotency_key,
+                    arguments=arguments,
+                    owner=owner,
+                    approval_id=_approval_id,
+                    action_id=ctx.execution.action_id if ctx.execution else None,
+                )
+            except LeaseAlreadyHeldError:
+                return self._empty_result(
+                    status=IN_PROGRESS,
+                    error_code=IDEMPOTENCY_IN_PROGRESS,
+                    reason="execution_lease_already_held",
+                    user_id=user_id, tenant_id=tenant_id,
+                    execution_id=execution_id,
+                    idempotency_key=idempotency_key,
+                )
+            ctx.lease_id = lease.lease_id
+            ctx.ev(self, EvidenceType.LEASE, {
+                "lease_id": lease.lease_id,
+                "owner": owner,
+                "ttl_seconds": self.lease_store.ttl_seconds,
+                "state": LEASE_ACTIVE,
+            })
+            try:
+                ctx.apply(self, ExecutionEvent.CONFIRMATION_APPROVED, reason="user_confirmed")
+                ctx.apply(self, ExecutionEvent.LEASE_GRANTED, reason="lease_acquired")
+                ctx.apply(self, ExecutionEvent.EXECUTION_STARTED, reason="execution_started")
+            except Exception:
+                pass
+            ctx.ev(self, EvidenceType.TOOL_CALL, {
+                "tool_name": record.tool_name,
+                "tool_version": record.tool_version,
+                "arguments": dict(arguments),
+                "proposal_id": _proposal_id,
+            })
+
+        def _finalize_lease(target_state: LeaseState) -> None:
+            """Release or complete the lease on our way out."""
+            if lease is None or ctx is None:
+                return
+            try:
+                owner = lease.owner
+                if target_state == LEASE_COMPLETED:
+                    self.lease_store.complete(lease.lease_id, owner=owner)
+                elif target_state == LEASE_RELEASED:
+                    self.lease_store.release(lease.lease_id, owner=owner)
+                # LEASE_EXPIRED is handled by expire_stale() on next boot/poll.
+            except (LeaseNotOwnedError, LeaseError):
+                pass
 
         try:
             product_ids = sorted({line["product_id"] for line in arguments["lines"]})
             # Product existence pre-check (TOOL_CONTRACTS guardrail): the read
             # doubles as the pre-create existence probe, so a nonexistent
             # product fails BEFORE any ERP mutation with ENTITY_NOT_FOUND.
+            if ctx is not None:
+                ctx.ev(self, EvidenceType.ERP_REQUEST, {
+                    "model": "product.product",
+                    "method": "read",
+                    "ids": product_ids,
+                    "phase": "pre_check",
+                })
             product_records = odoo_client.read("product.product", product_ids, ["list_price"])
+            if ctx is not None:
+                ctx.ev(self, EvidenceType.ERP_RESPONSE, {
+                    "model": "product.product",
+                    "records_returned": len(product_records) if isinstance(product_records, list) else 0,
+                })
             found_ids = {
                 int(product_record["id"])
                 for product_record in product_records
@@ -388,8 +579,25 @@ class ToolGateway:
             else:
                 payload = self._build_odoo_payload(arguments, record.idempotency_key)
                 create_attempted = True
+                if ctx is not None:
+                    try:
+                        ctx.apply(self, ExecutionEvent.VERIFICATION_STARTED, reason="pre_checks_passed")
+                    except Exception:
+                        pass
+                    ctx.ev(self, EvidenceType.ERP_REQUEST, {
+                        "model": "sale.order",
+                        "method": "create",
+                        "line_count": len(arguments["lines"]),
+                        "customer_id": arguments["customer_id"],
+                        "idempotency_key": record.idempotency_key,
+                    })
                 created_ids = odoo_client.create("sale.order", payload)
                 create_returned = True
+                if ctx is not None:
+                    ctx.ev(self, EvidenceType.ERP_RESPONSE, {
+                        "model": "sale.order",
+                        "created_ids": created_ids if isinstance(created_ids, list) else None,
+                    })
                 if not isinstance(created_ids, list) or len(created_ids) != 1 or not isinstance(created_ids[0], int):
                     verification = self._verification_failure(
                         arguments,
@@ -409,6 +617,12 @@ class ToolGateway:
                         structured = translate_odoo_exception(error)
                         verification = self._odoo_read_failure(arguments, record, structured)
                     else:
+                        if ctx is not None:
+                            ctx.ev(self, EvidenceType.VERIFICATION, {
+                                "order_id": created_ids[0],
+                                "passed": bool(passed.passed),
+                                "error": getattr(passed, "error", None),
+                            })
                         if passed.passed:
                             verification = self._verification_success(arguments, record, created_ids[0])
                         else:
@@ -437,6 +651,16 @@ class ToolGateway:
                         outcome=AMBIGUOUS,
                         error_code=structured.code,
                     )
+                    if ctx is not None:
+                        try:
+                            ctx.apply(self, ExecutionEvent.AMBIGUOUS_OUTCOME, reason=structured.message)
+                        except Exception:
+                            pass
+                        ctx.ev(self, EvidenceType.RECONCILIATION, {
+                            "reason": "retryable_after_create",
+                            "error_code": structured.code,
+                        })
+                    _finalize_lease(LEASE_EXPIRED)
                 else:
                     # Nothing reached Odoo: release the reservation so the
                     # identical request can be retried after the transient
@@ -460,6 +684,12 @@ class ToolGateway:
                             outcome=AMBIGUOUS,
                             error_code=structured.code,
                         )
+                    if ctx is not None:
+                        try:
+                            ctx.apply(self, ExecutionEvent.EXECUTION_TRANSIENT_FAILURE, reason=structured.message)
+                        except Exception:
+                            pass
+                    _finalize_lease(LEASE_RELEASED)
                 verification = {
                     "status": "ambiguous",
                     "reason": structured.message,
@@ -486,6 +716,12 @@ class ToolGateway:
                 and structured.code == "ERP_VALIDATION_ERROR"
             )
             verification = self._odoo_write_failure(arguments, record, structured)
+            if ctx is not None:
+                try:
+                    ctx.apply(self, ExecutionEvent.EXECUTION_HARD_FAILURE, reason=structured.message)
+                except Exception:
+                    pass
+            _finalize_lease(LEASE_RELEASED if validation_rejected else LEASE_EXPIRED)
 
         if verification["status"] == "error":
             # Definitive failure. Whether ERP state may have changed decides
@@ -505,6 +741,17 @@ class ToolGateway:
                     outcome=AMBIGUOUS,
                     error_code=verification["error_code"] or "UNKNOWN_ERROR",
                 )
+                if ctx is not None:
+                    try:
+                        ctx.apply(self, ExecutionEvent.VERIFICATION_FAILED, reason=verification.get("reason", "verification_failed"))
+                    except Exception:
+                        pass
+                    ctx.ev(self, EvidenceType.RECONCILIATION, {
+                        "reason": "verification_failed_after_write",
+                        "external_record_id": verification.get("external_record_id"),
+                        "error_code": verification.get("error_code"),
+                    })
+                _finalize_lease(LEASE_EXPIRED)
             else:
                 try:
                     self.idempotency_store.release(
@@ -525,6 +772,13 @@ class ToolGateway:
                         outcome=AMBIGUOUS,
                         error_code=verification["error_code"] or "UNKNOWN_ERROR",
                     )
+                if ctx is not None:
+                    try:
+                        ctx.apply(self, ExecutionEvent.VERIFICATION_FAILED, reason=verification.get("reason", "verification_failed"))
+                        ctx.apply(self, ExecutionEvent.EXECUTION_HARD_FAILURE, reason=verification.get("reason", "verification_failed"))
+                    except Exception:
+                        pass
+                _finalize_lease(LEASE_RELEASED)
         else:
             self.idempotency_store.complete(
                 record.idempotency_key,
@@ -538,6 +792,19 @@ class ToolGateway:
                 external_record_id=verification["external_record_id"],
                 reconciliation=verification["reconciliation"],
             )
+            if ctx is not None:
+                try:
+                    ctx.apply(self, ExecutionEvent.VERIFICATION_PASSED, reason="verification_passed")
+                    ctx.apply(self, ExecutionEvent.SUCCESS_CONFIRMED, reason="execution_completed")
+                except Exception:
+                    pass
+                if verification.get("result"):
+                    ctx.ev(self, EvidenceType.USER_VISIBLE_CLAIM, {
+                        "status": "success",
+                        "order_id": verification["result"].get("order_id"),
+                        "external_record_id": verification.get("external_record_id"),
+                    })
+            _finalize_lease(LEASE_COMPLETED)
         receipt = self.audit_store.append(
             self._verification_audit_record(record, arguments_for_audit, verification)
         )
@@ -583,13 +850,66 @@ class ToolGateway:
                         except (IdempotencyStoreError, IllegalIdempotencyTransition):
                             pass
             return self._approval_failure(approval)
+        # Rehydrate a _Context so execute_verified can continue the canonical
+        # state machine and evidence chain for this already-reserved execution.
+        record = self.idempotency_store.get(approval.idempotency_key, tenant_id, user_id)
+        exec_id = approval.execution_id or (record.execution_id if record is not None else None)
+        if exec_id is None:
+            return self._empty_result(
+                status=CONFLICT,
+                error_code=IDEMPOTENCY_CONFLICT,
+                reason="missing_execution_id_for_confirmation",
+                user_id=user_id, tenant_id=tenant_id,
+                idempotency_key=approval.idempotency_key,
+            )
+        envelope = ToolGatewayRequest(
+            request_id=f"confirm-{exec_id}",
+            user_id=user_id,
+            tenant_id=tenant_id,
+            tool_name=approval.tool_name,
+            tool_version=approval.tool_version,
+            arguments=approval.arguments or {},
+            idempotency_key=approval.idempotency_key,
+        )
+        ctx = _Context(record=envelope, tool_call_id=str(uuid.uuid4()), odoo_client=odoo_client,
+                       policy_decision="confirmation_required", idempotency_key=approval.idempotency_key,
+                       execution_id=exec_id, requires_confirmation=True)
+        # Reload existing canonical state from the store if it exists;
+        # otherwise initialize at AUTHORIZED (policy was evaluated before
+        # the proposal was issued).
+        saved = self.execution_store.load(exec_id)
+        if saved is not None:
+            ctx.execution = saved
+        else:
+            trace_id, action_id, _ = new_execution_identity()
+            ctx.execution = INITIAL_STATE()
+            ctx.execution = ExecutionState(
+                stage=ExecutionStage.AWAITING_CONFIRMATION,
+                status=ExecutionStatus.PENDING,
+                security=SecurityStatus.AUTHORIZED,
+                final=None,
+                history=(),
+                execution_id=exec_id,
+                action_id=action_id,
+                trace_id=envelope.request_id,
+            )
+            self.execution_store.save(ctx.execution)
+        # Emit APPROVAL evidence.
+        ctx.ev(self, EvidenceType.APPROVAL, {
+            "proposal_id": proposal_id,
+            "operation_hash": approval.operation_hash,
+            "approved_by": user_id,
+            "approval_level": "self",
+        })
         return self.execute_verified(
             approval.idempotency_key,
-            approval.execution_id,
+            exec_id,
             approval.arguments,
             odoo_client,
             tenant_id=tenant_id,
             user_id=user_id,
+            _context=ctx,
+            _proposal_id=proposal_id,
         )
 
     def record_confirmation_denial(
@@ -726,9 +1046,37 @@ class ToolGateway:
         return result if result.audit_id == audit_id else _replace_audit_id(result, audit_id)
 
     def _process(self, context: _Context) -> GatewayResult:
+        # 1) Create a canonical execution record and INTENT evidence event.
+        trace_id, action_id, execution_id = new_execution_identity()
+        context.execution_id = context.execution_id or execution_id
+        actor = Actor(user_id=context.record.user_id, tenant_id=context.record.tenant_id)
+        context.execution = INITIAL_STATE()
+        context.execution = ExecutionState(
+            stage=context.execution.stage,
+            status=context.execution.status,
+            security=context.execution.security,
+            final=context.execution.final,
+            history=context.execution.history,
+            execution_id=context.execution_id,
+            action_id=action_id,
+            trace_id=context.record.request_id,
+            last_updated=context.execution.last_updated,
+        )
+        # Drive the idle -> listening -> thinking -> planned -> policy_checking chain.
+        try:
+            context.apply(self, ExecutionEvent.USER_MESSAGE_RECEIVED, reason="gateway_entry", persist=False)
+            context.apply(self, ExecutionEvent.INTENT_PARSED, reason="envelope_valid", persist=False)
+            context.apply(self, ExecutionEvent.PLAN_BUILT, reason="tool_resolved", persist=False)
+            context.apply(self, ExecutionEvent.SECURITY_SCREENED, reason="envelope_validated", persist=False)
+        except Exception as exc:
+            # If any transition is illegal, keep the initial state and continue;
+            # the rest of _process will fail-closed on validation.
+            pass
+        self.execution_store.save(context.execution)
         try:
             self._validate_envelope(context)
         except InvalidGatewayRequest:
+            context.apply(self, ExecutionEvent.SECURITY_DENIED, reason="invalid_request_envelope")
             return self._final_result(
                 context,
                 status=VALIDATION_ERROR,
@@ -736,9 +1084,17 @@ class ToolGateway:
                 reason="invalid_request_envelope",
             )
 
+        context.ev(self, EvidenceType.INTENT, {
+            "request_id": context.record.request_id,
+            "tool_name": context.record.tool_name,
+            "tool_version": context.record.tool_version,
+            "arguments": dict(context.record.arguments),
+        })
+
         try:
             contract = self.registry.get(context.record.tool_name)
         except KeyError:
+            context.apply(self, ExecutionEvent.SECURITY_DENIED, reason="unknown_tool")
             return self._final_result(
                 context,
                 status=DENIED,
@@ -747,6 +1103,7 @@ class ToolGateway:
             )
 
         if contract["tool_version"] != context.record.tool_version:
+            context.apply(self, ExecutionEvent.SECURITY_DENIED, reason="unsupported_tool_version")
             return self._final_result(
                 context,
                 status=DENIED,
@@ -756,7 +1113,8 @@ class ToolGateway:
 
         try:
             self._validate_arguments(context, contract)
-        except jsonschema.ValidationError:
+        except jsonschema.ValidationError as exc:
+            context.apply(self, ExecutionEvent.SECURITY_DENIED, reason=f"argument_schema_failed: {exc.message}")
             return self._final_result(
                 context,
                 status=VALIDATION_ERROR,
@@ -764,36 +1122,118 @@ class ToolGateway:
                 reason="argument_schema_failed",
             )
 
-        policy_decision = self.policy_engine.evaluate(
-            {
-                "user_id": context.record.user_id,
-                "tenant_id": context.record.tenant_id,
-                "tool_name": context.record.tool_name,
-                "tool_version": context.record.tool_version,
-            }
+        # Risk assessment (Phase 5): drives which risk-based outcomes apply.
+        context.risk = assess_risk(contract, context.record.arguments)
+        context.ev(self, EvidenceType.RISK_ASSESSMENT, {
+            "level": context.risk.level,
+            "financial_impact": context.risk.financial_impact,
+            "reversibility": context.risk.reversibility,
+            "privilege_level": context.risk.privilege_level,
+            "sensitive_data": context.risk.sensitive_data,
+            "external_side_effect": context.risk.external_side_effect,
+            "factors": list(context.risk.factors),
+        })
+
+        # ABAC v2 (Phase 7): attribute-based decision with policy hash/version.
+        decision: PolicyDecision2 = self.policy_engine2.evaluate(
+            user_id=context.record.user_id,
+            tenant_id=context.record.tenant_id,
+            tool_name=context.record.tool_name,
+            tool_version=context.record.tool_version,
+            risk=context.risk,
         )
-        context.policy_decision = policy_decision.decision
-        if policy_decision.decision == "denied":
+        # PolicyEngine2.evaluate uses risk.level as a string; align with contract.
+        # The contract's declared risk_level is what we classify from, so no
+        # adjustment needed here.
+        # Map v2 decision onto legacy decision strings.
+        if decision.decision == "allow":
+            context.policy_decision = ALLOWED
+        elif decision.decision == "require_approval":
+            context.policy_decision = "confirmation_required"
+        else:
+            context.policy_decision = "denied"
+        context.policy_version = decision.policy_version
+        context.policy_hash = decision.policy_hash
+        context.ev(self, EvidenceType.POLICY_DECISION, {
+            "outcome": decision.decision,
+            "rule_id": decision.rule_id,
+            "reason": decision.reason,
+            "policy_version": decision.policy_version,
+            "policy_hash": decision.policy_hash,
+            "requires_approval": decision.requires_approval,
+            "required_approval_level": decision.required_approval_level,
+            "risk_level": context.risk.level,
+        })
+
+        # Legacy engine kept in place as defence-in-depth; if v1 denies what v2
+        # allowed, the stricter decision wins (fail closed).
+        legacy = self.policy_engine.evaluate({
+            "user_id": context.record.user_id,
+            "tenant_id": context.record.tenant_id,
+            "tool_name": context.record.tool_name,
+            "tool_version": context.record.tool_version,
+            "arguments": getattr(context.record, "arguments", None) or {},
+        })
+        if legacy.decision == "denied" and decision.decision != "deny":
+            context.policy_decision = "denied"
+            decision = PolicyDecision2(
+                decision="deny",
+                rule_id=getattr(legacy, "policy_rule_id", "legacy_override"),
+                policy_version=decision.policy_version,
+                policy_hash=decision.policy_hash,
+                reason=f"legacy_policy_override: {legacy.reason}",
+                requires_approval=False,
+            )
+
+        # Advance the canonical state machine on non-deny outcomes.
+        if decision.decision != "deny" and decision.decision != "require_step_up":
+            try:
+                context.apply(self, ExecutionEvent.POLICY_EVALUATED, reason=f"policy:{decision.decision}")
+            except Exception:
+                pass
+
+        if decision.decision == "deny":
+            try:
+                context.apply(self, ExecutionEvent.SECURITY_DENIED, reason=decision.reason)
+            except Exception:
+                pass
             return self._final_result(
                 context,
                 status=DENIED,
                 error_code=POLICY_DENIED,
-                reason=policy_decision.reason,
+                reason=decision.reason,
             )
+        if decision.decision == "require_step_up":
+            # R4 MFA step-up is not wired into the cockpit UI yet; fail closed
+            # to a clear error instead of silently allowing.
+            try:
+                context.apply(self, ExecutionEvent.STEP_UP_REQUESTED, reason="mfa_step_up_required")
+            except Exception:
+                pass
+            return self._final_result(
+                context,
+                status=DENIED,
+                error_code="MFA_REQUIRED",
+                reason=decision.reason,
+            )
+        if decision.required_approval_level == "manager":
+            # R3 manager approval escalates to a normal confirmation-required
+            # flow for the POC; the UI labels it accordingly.
+            context.requires_confirmation = True
 
         if contract["readOnly"] is False:
-            return self._process_mutating(context, contract, policy_decision)
+            return self._process_mutating(context, contract, decision)
 
         if context.odoo_client is not None:
             # Fail-closed: reads execute only on an explicit allow decision
             # (e.g. a future policy demanding confirmation for a read must not
             # silently execute unconfirmed).
-            if policy_decision.decision != ALLOWED:
+            if decision.decision != "allow":
                 return self._final_result(
                     context,
                     status=DENIED,
                     error_code=POLICY_DENIED,
-                    reason=policy_decision.reason,
+                    reason=decision.reason,
                 )
             return self._execute_read(context, contract)
 
@@ -936,7 +1376,25 @@ class ToolGateway:
             user_id=context.record.user_id,
         )
         context.idempotency_key = computed_key
-        context.execution_id = outcome.record.execution_id
+        # The idempotency store is the authoritative source of execution_id
+        # (it allocates the UUID inside reserve()). Rebase our canonical
+        # ExecutionState onto that execution_id so later evidence/lease events
+        # carry the same id.
+        reserved_execution_id = outcome.record.execution_id
+        if context.execution is not None and context.execution_id != reserved_execution_id:
+            context.execution_id = reserved_execution_id
+            context.execution = ExecutionState(
+                stage=context.execution.stage,
+                status=context.execution.status,
+                security=context.execution.security,
+                final=context.execution.final,
+                history=context.execution.history,
+                execution_id=reserved_execution_id,
+                action_id=context.execution.action_id,
+                trace_id=context.record.request_id,
+                last_updated=context.execution.last_updated,
+            )
+            self.execution_store.save(context.execution)
 
         if outcome.status == CONFLICT:
             return self._final_result(
@@ -970,6 +1428,10 @@ class ToolGateway:
             )
         if outcome.status == RESERVED and contract["requiresConfirmation"] is True:
             context.requires_confirmation = True
+            try:
+                context.apply(self, ExecutionEvent.PROPOSAL_ISSUED, reason="awaiting_user_confirmation")
+            except Exception:
+                pass
             return self._final_result(
                 context,
                 status=CONFIRMATION_REQUIRED,

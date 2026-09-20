@@ -747,9 +747,9 @@ class AgentRuntime:
     def amend_proposal(self, proposal_id: str, new_arguments: Mapping[str, Any]) -> AgentResult:
         """Re-issue a pending proposal with edited arguments, fully revalidated.
 
-        The original proposal is declined on the record (never silently
-        overwritten) and a fresh request goes through schema validation, the
-        policy engine, idempotency reservation, and a new signature hash — so
+        Uses ``create_successor_proposal`` so a new proposal_version is issued,
+        the predecessor is superseded, and any prior approval is invalidated
+        (fresh operation_hash + new idempotency review). This way
         "خلّيني أغيّر الكمية 15 بدل 20" is a governance event, not a UI trick.
         """
         original = self.gateway.confirmation_store.get_proposal(proposal_id)
@@ -767,23 +767,41 @@ class AgentRuntime:
                 gateway_result=None,
                 engine=self.engine,
             )
-        declined = self.gateway.record_confirmation_denial(
-            proposal_id=proposal_id,
-            user_id=self.user_id or "",
-            tenant_id=self.tenant_id or "",
-        )
+        # Validate new arguments against current schema BEFORE creating successor.
         call = LLMToolCall(name=original.tool_name, arguments=dict(new_arguments or {}), call_id=str(uuid.uuid4()))
         version, error, reason = self._validate_tool_call(call)
         if error:
             answer = compose_answer(outcome=error, tool_name=call.name, tool_arguments=dict(call.arguments), structured_error=None)
             return AgentResult(
                 outcome=error,
-                response_ar=f"التعديل مرفوض: {reason or 'العقد ما اتحققش'}. المقترح الأصلي اتقفل.",
-                gateway_result=declined,
+                response_ar=f"التعديل مرفوض: {reason or 'العقد ما اتحققش'}. المقترح الأصلي فضل زي ما هو.",
+                gateway_result=None,
                 tool_call=call,
                 answer=answer,
                 engine=self.engine,
             )
+        # Decline + release the old idempotency reservation before creating successor.
+        declined = self.gateway.record_confirmation_denial(
+            proposal_id=proposal_id,
+            user_id=self.user_id or "",
+            tenant_id=self.tenant_id or "",
+        )
+        successor = self.gateway.confirmation_store.create_successor_proposal(
+            predecessor_id=proposal_id,
+            new_arguments=dict(call.arguments),
+            user_id=self.user_id or "",
+            tenant_id=self.tenant_id or "",
+        )
+        if successor.proposal is None or successor.status != "approved":
+            answer = compose_answer(outcome="error", structured_error=successor.structured_error, tool_name=call.name)
+            return AgentResult(
+                outcome="error",
+                response_ar=answer.to_text() or "تعذر إنشاء النسخة المعدلة.",
+                gateway_result=declined,
+                answer=answer,
+                engine=self.engine,
+            )
+        # Issue fresh gateway request to get idempotency reservation and audit row for the new version.
         request = ToolGatewayRequest(
             request_id=str(uuid.uuid4()),
             user_id=self.user_id or "",
@@ -795,7 +813,10 @@ class AgentRuntime:
         )
         gateway_result = self.gateway.handle_request(request)
         answer = compose_answer(outcome=TOOL_CALL, gateway_result=gateway_result, tool_name=call.name)
-        answer.notices.insert(0, "المقترح اتعاد بناؤه بالتعديل: توقيعك الجديد هو اللي نافّذ، والسجل فيه الاتنين.")
+        answer.notices.insert(
+            0,
+            f"المقترح اتعدّل للإصدار رقم {successor.proposal.proposal_version}: التوقيع القديم اتلغى، والتوقيع الجديد هو اللي نافّذ، والسجل فيه الاتنين.",
+        )
         return AgentResult(
             outcome=CONFIRMATION_AMENDED,
             response_ar=answer.to_text() or "اتحدّث المقترح وجاهز للتوقيع.",

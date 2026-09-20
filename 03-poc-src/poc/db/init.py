@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 PROPOSALS_DDL = """
 CREATE TABLE IF NOT EXISTS proposals (
     proposal_id TEXT PRIMARY KEY,
+    proposal_version INTEGER NOT NULL DEFAULT 1, -- server-incremented on each amend (Phase 4)
     tool_name TEXT NOT NULL,
     tool_version TEXT NOT NULL,
     arguments TEXT NOT NULL,           -- JSON serialized
@@ -94,7 +95,8 @@ CREATE TABLE IF NOT EXISTS proposals (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,          -- created_at + CONFIRMATION_EXPIRY_SECONDS
     confirmed_at TEXT,
-    executed_at TEXT
+    executed_at TEXT,
+    superseded_by TEXT                -- proposal_id that replaces this one after amend (Phase 4)
 )
 """
 
@@ -103,6 +105,41 @@ _DDL_BY_TABLE = {
     "idempotency_keys": IDEMPOTENCY_KEYS_DDL,
     "proposals": PROPOSALS_DDL,
 }
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}  # noqa: S608
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply additive in-place migrations. Always idempotent."""
+    # Migration 2026-09-20: proposal_version + superseded_by columns (Phase 4).
+    props_cols = _columns(conn, "proposals") if "proposals" in _existing_tables(conn) else set()
+    if props_cols and "proposal_version" not in props_cols:
+        conn.execute("ALTER TABLE proposals ADD COLUMN proposal_version INTEGER NOT NULL DEFAULT 1")
+    if props_cols and "superseded_by" not in props_cols:
+        conn.execute("ALTER TABLE proposals ADD COLUMN superseded_by TEXT")
+    # Migration 2026-09-20: execution_leases table (Phase 5).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS execution_leases (
+            lease_id TEXT PRIMARY KEY,
+            execution_id TEXT NOT NULL UNIQUE,
+            idempotency_key TEXT NOT NULL,
+            owner TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            approval_id TEXT,
+            action_id TEXT,
+            issued_at TEXT NOT NULL,
+            heartbeat_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            state TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_leases_key_state ON execution_leases(idempotency_key, state)"
+    )
 
 
 def _existing_tables(conn: sqlite3.Connection) -> set[str]:
@@ -127,12 +164,17 @@ def initialize(db_path: Path = DEFAULT_DB_PATH) -> dict:
             table: conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]  # noqa: S608 (fixed names)
             for table in TABLES
         }
+        # In-place schema migrations (additive; never drop/rename).
+        _run_migrations(conn)
+        conn.commit()
+        after_migration = _existing_tables(conn)
         return {
             "db_path": str(db_path),
             "journal_mode": journal_mode,
             "created_tables": created,
             "preexisting_tables": existing,
             "row_counts": row_counts,
+            "tables_present": sorted(after_migration),
         }
     finally:
         conn.close()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import threading
 import urllib.request
@@ -27,7 +28,9 @@ class SeededFakeOdoo:
 
 
 @pytest.fixture
-def test_server(tmp_path: Path):
+def test_server(tmp_path: Path, monkeypatch):
+    # Enable development mode for tests so /api/test/replay etc. are reachable.
+    monkeypatch.setenv("MIZAN_DEV", "1")
     db_path = tmp_path / "web_test.db"
     initialize(db_path)
     gateway = ToolGateway(db_path=db_path)
@@ -109,17 +112,26 @@ def test_static_files_served(test_server):
     # Index page
     status, body, headers = http_get(f"{base_url}/")
     assert status == 200
-    assert "Agent-Native ERP" in body
+    # The server prefers frontend/dist (React/TS bundle) when built; otherwise
+    # falls back to the legacy poc/web cockpit.
+    assert ("<div id=\"root\"></div>" in body) or ("Agent-Native ERP" in body)
 
-    # Stylesheet
-    status, body, headers = http_get(f"{base_url}/styles.css")
-    assert status == 200
-    assert "--font-sans" in body
-
-    # App script
-    status, body, headers = http_get(f"{base_url}/app.js")
-    assert status == 200
-    assert "fetchTelemetry" in body
+    if "/assets/" in body:
+        # React/TS dist: probe a hashed asset.
+        import re
+        m = re.search(r'src="(/assets/[^"]+\.js)"', body)
+        assert m, "expected bundled script tag"
+        status, body, headers = http_get(f"{base_url}{m.group(1)}")
+        assert status == 200
+        assert "ميزان" in body or "Mizan" in body
+    else:
+        # Legacy cockpit static files.
+        status, body, headers = http_get(f"{base_url}/styles.css")
+        assert status == 200
+        assert "--font-sans" in body
+        status, body, headers = http_get(f"{base_url}/app.js")
+        assert status == 200
+        assert "fetchTelemetry" in body
 
 
 def test_api_tools_registry(test_server):
