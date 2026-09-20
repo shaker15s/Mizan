@@ -1172,6 +1172,7 @@ class ToolGateway:
             "tenant_id": context.record.tenant_id,
             "tool_name": context.record.tool_name,
             "tool_version": context.record.tool_version,
+            "arguments": getattr(context.record, "arguments", None) or {},
         })
         if legacy.decision == "denied" and decision.decision != "deny":
             context.policy_decision = "denied"

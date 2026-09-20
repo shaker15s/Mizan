@@ -40,6 +40,7 @@ _VALID_OUTCOMES = {
     "replay",
     "idempotency_conflict",
     "erp_validation_error",
+    "confirmation_required",
 }
 
 
