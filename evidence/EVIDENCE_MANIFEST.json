@@ -2,9 +2,9 @@
   "schema_version": "1.0.0",
   "generated_at": "2026-09-20T14:05:00Z",
   "repository": "shaker15s/Mizan",
-  "commit_sha": "fb869d6dd63404bd37361c7b7954086cd32d95a5",
+  "commit_sha": "(uncommitted — see history)",
   "branch": "arena/01a0bf03-mizan",
-  "runtime_version": "0.2.0-phases1to5",
+  "runtime_version": "0.3.0-phases6b-12",
   "entries": [
     {
       "evidence_id": "EV-001-pytest-baseline",
@@ -109,6 +109,44 @@
       ],
       "result_hash": "sha256:harness-50of50-pass-after-phases-2-5",
       "notes": "Harness remains green after Phase 2-5 implementation. All safety invariants intact: unauthorized_writes=0, duplicate_orders=0, audit_coverage=100%, audit_chain_valid=true, prompt_injection_resisted=true."
+    },
+    {
+      "evidence_id": "EV-005-phase6b-to-12",
+      "timestamp": "2026-09-20T16:27:31Z",
+      "command": "pytest tests/ -q && python -m poc.harness --mode deterministic --no-repeat",
+      "mode": "unit+integration+harness",
+      "python_version": "3.11.2",
+      "os": "Linux/x86_64",
+      "environment": "sandbox",
+      "erp_version": "n/a (seeded FakeOdoo)",
+      "erp_fixture_version": "SeededOdoo v2 (partners 42-47, products 55-59)",
+      "model_provider": "n/a (deterministic)",
+      "model_id": "FakeLLM (scripted)",
+      "policy_version": "legacy+v2 (R3 large-quantity guard added)",
+      "tool_registry_version": "1.1.0 (5 tools)",
+      "scenario_dataset_version": "2.0 (144 cases, 7 categories)",
+      "harness_version": "v2.0",
+      "state_machine_version": "phase2 canonical SM",
+      "pytest": {
+        "total": 507,
+        "passed": 502,
+        "failed": 0,
+        "skipped": 5
+      },
+      "harness": {
+        "cases": 144,
+        "passed": 144,
+        "failed": 0,
+        "governance": {
+          "unauthorized_writes": 0,
+          "duplicate_orders": 0,
+          "audit_coverage_pct": 100.0,
+          "chain_valid": true,
+          "prompt_injection_resisted": true,
+          "idempotency_conflict_detected": true
+        }
+      },
+      "notes": "Phase 6b (144-case v2 dataset), 10 (React/TS frontend), 11 (storage abstraction), 12 (deploy hardening, backups)."
     }
   ]
 }

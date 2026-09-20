@@ -1020,6 +1020,14 @@ def run_server(port: int = 8080, open_browser: bool = False, runtime: AgentRunti
     """Start the ERP Web Cockpit server."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     settings = get_settings()
+    # Phase 12: fail-closed on missing production secrets before binding.
+    from poc.deploy import verify_secrets
+    secrets_report = verify_secrets()
+    if not secrets_report.ok:
+        raise SystemExit(
+            f"refusing to start in env={secrets_report.env}: "
+            f"missing={list(secrets_report.missing)} placeholder={list(secrets_report.placeholder)}"
+        )
     resolved_runtime = runtime or build_runtime(settings=settings)
     server = ERPWebServer(("0.0.0.0", port), resolved_runtime, settings=settings)
     url = f"http://localhost:{port}"
