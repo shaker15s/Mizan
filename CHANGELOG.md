@@ -190,3 +190,34 @@ $ cd frontend && npm run build
 ✓ 36 modules transformed · dist/index.html 0.89 KB · built in 971 ms
 ```
 Backend unchanged: 494 tests passed, harness 50/50 PASS.
+
+## [2026-09-20] — phase 5 complete: execution lease wired into gateway
+
+### Added
+- **Lease lifecycle inside `confirm_and_execute` / `execute_verified`:**
+    - Acquires a `LeaseStore` lease atomically before any ERP call, owner-tagged
+      with `gateway:<hostname>:<pid>`.
+    - Prevents double-execution when another concurrent worker already holds an
+      active lease for the same idempotency key (returns 409/IN_PROGRESS, Odoo
+      `create` is never invoked).
+    - Transitions the canonical state machine through
+      CONFIRMATION_APPROVED → LEASE_GRANTED → EXECUTION_STARTED →
+      VERIFICATION_STARTED → VERIFICATION_PASSED → SUCCESS_CONFIRMED
+      (or *_FAILURE / AMBIGUOUS_OUTCOME on error).
+    - Completes/releases/expires the lease on every exit path (success, hard
+      failure, retryable-before-write, ambiguous-after-write).
+- **Additional evidence events** on the confirmed-mutation path: APPROVAL, LEASE,
+  TOOL_CALL, ERP_REQUEST (product pre-check + sale.order.create), ERP_RESPONSE,
+  VERIFICATION, RECONCILIATION, USER_VISIBLE_CLAIM. Hash chain remains valid
+  (496 tests verify chain integrity end-to-end).
+- **Execution ID alignment:** `_process_mutating` now rebases the in-memory
+  `ExecutionState` onto the authoritative execution_id allocated by
+  `IdempotencyStore.reserve()` so evidence/leases/audit share one UUID.
+- **New test `tests/test_lease_in_gateway.py`** (2 tests): end-to-end lease
+  acquisition + evidence coverage, plus concurrent-lease duplicate-write block.
+
+### Proof
+```
+pytest tests/ -q       → 496 passed, 5 skipped (was 494 → +2)
+harness deterministic  → 50/50 PASS · 0 unauthorized · 0 duplicate · chain valid
+```
