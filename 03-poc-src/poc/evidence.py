@@ -26,6 +26,7 @@ class EvidenceType(str, Enum):
     PLAN = "plan"
     ENTITY_RESOLUTION = "entity_resolution"
     POLICY_DECISION = "policy_decision"
+    RISK_ASSESSMENT = "risk_assessment"
     APPROVAL = "approval"
     LEASE = "lease"
     TOOL_CALL = "tool_call"
@@ -52,6 +53,8 @@ CREATE TABLE IF NOT EXISTS evidence_events (
     policy_hash TEXT,
     tool_name TEXT,
     tool_version TEXT,
+    actor_id TEXT,
+    tenant_id TEXT,
     payload TEXT NOT NULL,                  -- JSON: non-sensitive, allowlisted content
     previous_hash TEXT NOT NULL,
     own_hash TEXT NOT NULL
@@ -137,6 +140,8 @@ class EvidenceStore:
         policy_hash: str | None = None,
         tool_name: str | None = None,
         tool_version: str | None = None,
+        actor_id: str | None = None,
+        tenant_id: str | None = None,
         timestamp: str | None = None,
     ) -> EvidenceEvent:
         import uuid
@@ -163,6 +168,8 @@ class EvidenceStore:
                     "policy_hash": policy_hash,
                     "tool_name": tool_name,
                     "tool_version": tool_version,
+                    "actor_id": actor_id,
+                    "tenant_id": tenant_id,
                     "payload": payload_json,
                     "previous_hash": previous,
                 })
@@ -173,14 +180,14 @@ class EvidenceStore:
                     (evidence_id, event_type, timestamp, trace_id, execution_id,
                      action_id, parent_event_id, tool_call_id, approval_id,
                      policy_version, policy_hash, tool_name, tool_version,
-                     payload, previous_hash, own_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     actor_id, tenant_id, payload, previous_hash, own_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         evidence_id, event_type.value, ts, trace_id, execution_id,
                         action_id, parent_event_id, tool_call_id, approval_id,
                         policy_version, policy_hash, tool_name, tool_version,
-                        payload_json, previous, own_hash,
+                        actor_id, tenant_id, payload_json, previous, own_hash,
                     ),
                 )
                 conn.commit()
@@ -222,6 +229,8 @@ class EvidenceStore:
                 "policy_hash": row["policy_hash"],
                 "tool_name": row["tool_name"],
                 "tool_version": row["tool_version"],
+                "actor_id": row["actor_id"] if "actor_id" in row.keys() else None,
+                "tenant_id": row["tenant_id"] if "tenant_id" in row.keys() else None,
                 "payload": stored_payload,
                 "previous_hash": row["previous_hash"],
             })
