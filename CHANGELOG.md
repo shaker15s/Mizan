@@ -4,6 +4,80 @@ All notable changes to Mizan. Dates are Egyptian; the format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-ish, and every entry lists
 the command that proves it.
 
+## [2026-09-20] — phases 6–9: execution store, policy 2.0, evidence graph, API hardening
+
+### Added
+- **ExecutionStore** (`poc/execution/store.py`) — persistence for canonical state with event log replay; per-execution row + append-only events.
+- **Policy Engine 2.0** (`poc/policy_engine2.py`) — attribute-based decisions with `policy_version` + `policy_hash`, R0→allow, R1→allow, R2→self-confirm, R3→manager approval, R4→MFA/step-up. Backward-compatible with the legacy engine.
+- **Evidence event graph** (`poc/evidence.py`) — typed append-only evidence events (INTENT, PLAN, ENTITY_RESOLUTION, POLICY_DECISION, APPROVAL, LEASE, TOOL_CALL, ERP_REQUEST, ERP_RESPONSE, VERIFICATION, RECONCILIATION, USER_VISIBLE_CLAIM, STATE_TRANSITION) with SHA-256 hash chain (separate from audit_log). Provides `verify_chain()` and `for_execution()`.
+- **Web security middleware** (`poc/web_security.py`) and hardening:
+    - Strict CSP/HSTS/X-Frame-Options/X-Content-Type-Options/Referrer-Policy/Permissions-Policy applied to all responses.
+    - CORS is same-origin by default; dev mode reflects the origin; `MIZAN_ALLOWED_ORIGINS` allows explicit origins.
+    - Dev routes (`/api/test/*`, `/api/replay`, `/api/dev/*`, `/api/eval/*`, `/api/debug/*`) return 404 in production mode unless `MIZAN_DEV=1`.
+    - Request body size cap (default 512 KB).
+    - In-memory sliding-window rate limiter (default 120 req/min) with `X-RateLimit-*` headers and 429 responses.
+    - `Server: mizan` fingerprint removal.
+- **New tests:** `test_execution_store.py`, `test_policy_engine2.py`, `test_evidence_store.py`, `test_web_security.py` (13 tests).
+
+### Proof
+```
+$ PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
+494 passed, 5 skipped   (was 481 → +13 new; 0 regressions)
+$ PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat
+50/50 PASS · all safety gates green
+```
+
+## [2026-09-20] — phases 1–5: canonical state, typed action, proposal versioning, execution lease, risk
+
+### Added
+- **Mandatory architectural documentation** (`docs/`) — `CURRENT_STATE.md`,
+  `ARCHITECTURE_MAP.md`, `TRUST_BOUNDARY.md`, `CANONICAL_STATE_MACHINE.md`,
+  `HARNESS_ARCHITECTURE.md`, `SECURITY_CONTROL_MATRIX.md`, `TRACEABILITY_MATRIX.md`,
+  `MIGRATION_PLAN.md`, and `docs/adr/ADR-001..003`. All populated with verified
+  repository reality, not templates.
+- **Canonical Execution State Machine** (`poc/execution/state_machine.py`) — ONE
+  authoritative lifecycle (stage/status/security/final), enum-typed, event-driven,
+  immutable transitions with history. 60+ transitions cover happy path,
+  clarification, policy, approval, lease, execution, verification, retry,
+  ambiguity, reconciliation, compensation, quarantine, and terminals. Backward
+  compatibility via `project_to_gateway_status()` and `project_to_proposal_state()`.
+- **Typed Action Envelope** (`poc/execution/action.py`) — frozen dataclass
+  carrying actor (server-owned), versions, risk, idempotency binding; never
+  overwritten by model output.
+- **Proposal Versioning** (Phase 4) — `proposal_version` INTEGER column,
+  `superseded_by` pointer, `ConfirmationStore.create_successor_proposal()`
+  atomically marks old version failed/superseded and issues a new version with
+  a fresh operation_hash; prior approvals on superseded proposals are rejected.
+  `AgentRuntime.amend_proposal()` now uses successor creation.
+- **Execution Lease** (`poc/execution/lease.py`) — lease_id/owner/heartbeat/
+  payload_hash, acquire/heartbeat/complete/release/expire_stale, owner-gated
+  transitions, expired leases are superseded not double-reserved.
+- **Deterministic Risk Engine v1** (`poc/execution/risk.py`) — R0–R4 based on
+  readOnly/destructive/quantity thresholds; explains factors (precursor to
+  Policy 2.0 / ABAC).
+- **Evidence manifest** (`evidence/EVIDENCE_MANIFEST.json`) — every test/harness
+  run attributable to commit, Python version, OS, env, tool/policy/prompt/
+  harness versions, pass/fail/skip, artifacts, result hash.
+- **New tests:** `test_execution_state_machine.py` (22), `test_execution_lease.py` (8),
+  `test_risk_engine.py` (4), `test_proposal_versioning.py` (4).
+
+### Changed
+- **`poc/db/init.py`** — idempotent schema migrations: adds `proposal_version`
+  and `superseded_by` to `proposals` and creates the `execution_leases` table
+  on existing databases (no DROP, no data loss).
+- **`poc/confirmation.py`** — `Proposal` dataclass carries `proposal_version`
+  and `superseded_by`; `create_proposal` writes version=1; new successor method.
+
+### Proof
+```
+$ PYTHONPATH=. .venv/bin/python -m pytest tests/ -q
+481 passed, 5 skipped   (previously 442 passed, 5 skipped; +39 new tests, 0 regressions)
+$ PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat
+50/50 PASS, all safety gates green
+```
+
+See `evidence/EVIDENCE_MANIFEST.json` EV-003, EV-004.
+
 ## [2026-09-19] — the integrated pass: answer quality, eval harness v2, cockpit rebuild
 
 ### Added

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import threading
 import urllib.request
@@ -27,7 +28,9 @@ class SeededFakeOdoo:
 
 
 @pytest.fixture
-def test_server(tmp_path: Path):
+def test_server(tmp_path: Path, monkeypatch):
+    # Enable development mode for tests so /api/test/replay etc. are reachable.
+    monkeypatch.setenv("MIZAN_DEV", "1")
     db_path = tmp_path / "web_test.db"
     initialize(db_path)
     gateway = ToolGateway(db_path=db_path)

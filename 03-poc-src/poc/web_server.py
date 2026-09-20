@@ -61,6 +61,19 @@ from poc.settings import get_settings
 from poc.slash import execute as run_slash
 from poc.slash import is_slash
 from poc.tool_contracts import get_registry
+from poc.web_security import (
+    DEV_ROUTE_PREFIXES,
+    DEFAULT_SECURITY_HEADERS,
+    RateLimiter,
+    RequestTooLarge,
+    SecurityConfig,
+    apply_cors,
+    client_ip,
+    enforce_content_length,
+    is_dev_route,
+    resolve_identity,
+    wrap_security_headers,
+)
 
 LOGGER = logging.getLogger("erp.web_server")
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -68,17 +81,37 @@ API_VERSION = "1.1.0"
 MAX_BODY_BYTES = 128 * 1024
 COMPRESSIBLE = {".js", ".css", ".html", ".svg", ".json", ".map"}
 MIN_COMPRESS_BYTES = 1200
-_CSP = (
-    "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "font-src 'self' https://fonts.gstatic.com; "
-    "img-src 'self' data:; "
-    "connect-src 'self'; "
-    "frame-ancestors 'none'; "
-    "base-uri 'self'; "
-    "form-action 'none'"
-)
+_CSP = DEFAULT_SECURITY_HEADERS["Content-Security-Policy"]
+# Voice / microphone is allowed from 'self' per plan §8.H (feature-flag policy
+# declared in Permissions-Policy); browsers only prompt after user gesture.
+
+# --- Security config --------------------------------------------------------
+def _security_config() -> SecurityConfig:
+    """Resolve security config from environment/settings.
+
+    * MIZAN_DEV=1 enables development mode (wildcard CORS local, dev routes).
+    * MIZAN_ALLOWED_ORIGINS is a comma-separated list of allowed origins.
+    * Production default is same-origin (no CORS headers) with dev routes disabled.
+    """
+    dev_mode = os.environ.get("MIZAN_DEV", "0") == "1"
+    origins_raw = os.environ.get("MIZAN_ALLOWED_ORIGINS", "")
+    allowed_origins = tuple(o.strip() for o in origins_raw.split(",") if o.strip())
+    if dev_mode and not allowed_origins:
+        allowed_origins = ()  # development mode reflects any origin
+    return SecurityConfig(
+        development_mode=dev_mode,
+        allowed_origins=allowed_origins,
+        request_size_limit_bytes=512 * 1024,
+        rate_limit_per_minute=120,
+        rate_limit_window_seconds=60,
+        force_hsts=False,
+        default_user_id=os.environ.get("POC_USER_ID", "sales_user@test"),
+        default_tenant_id=os.environ.get("POC_TENANT_ID", "poc_tenant_001"),
+        require_authentication=False,  # real auth Phase 9 continuation
+    )
+
+
+_RATE_LIMITERS: dict[str, RateLimiter] = {}
 
 
 class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -122,12 +155,39 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def sessions(self):
         return self.server.sessions  # type: ignore[attr-defined]
 
+    @property
+    def security_config(self) -> SecurityConfig:
+        cfg = getattr(self.server, "security_config", None)
+        if cfg is None:
+            cfg = _security_config()
+            self.server.security_config = cfg  # type: ignore[attr-defined]
+        return cfg
+
+    def _rate_limiter(self) -> RateLimiter:
+        cfg = self.security_config
+        key = f"rl-{cfg.rate_limit_window_seconds}-{cfg.rate_limit_per_minute}"
+        rl = _RATE_LIMITERS.get(key)
+        if rl is None:
+            rl = RateLimiter(cfg.rate_limit_window_seconds, cfg.rate_limit_per_minute)
+            _RATE_LIMITERS[key] = rl
+        return rl
+
+    def _is_https(self) -> bool:
+        return (self.headers.get("X-Forwarded-Proto") == "https") or str(self.headers.get(":scheme") or "") == "https"
+
+    def _origin(self) -> str | None:
+        return self.headers.get("Origin")
+
+    def _reject(self, status: int, code: str, message_ar: str) -> None:
+        self._send_json(status, {
+            "success": False,
+            "error": {"code": code, "message": message_ar},
+            "response_ar": message_ar,
+        })
+
     def _security_headers(self) -> None:
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), autoplay=()")
-        self.send_header("Content-Security-Policy", _CSP)
+        # Headers are applied via wrap_security_headers in _set_headers.
+        pass
 
     def _set_headers(
         self,
@@ -138,14 +198,23 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
         extra: Mapping[str, str] | None = None,
     ) -> None:
         self.send_response(status)
-        self.send_header("Content-Type", content_type)
+        base = {"Content-Type": content_type, "Cache-Control": "no-cache, no-store, must-revalidate"}
+        headers = wrap_security_headers(
+            base,
+            config=self.security_config,
+            is_https=self._is_https(),
+            content_type=content_type,
+        )
         if cors:
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Mizan-Session")
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        self._security_headers()
-        for key, value in (extra or {}).items():
+            headers = apply_cors(
+                headers,
+                request_origin=self._origin(),
+                config=self.security_config,
+                allow_methods="GET, POST, OPTIONS",
+            )
+            headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Mizan-Session, X-Mizan-Request-ID"
+        headers["Server"] = "mizan"
+        for key, value in {**headers, **(extra or {})}.items():
             self.send_header(key, value)
         self.end_headers()
 
@@ -156,8 +225,15 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             return {}
         if length <= 0:
             return {}
-        if length > MAX_BODY_BYTES:
-            LOGGER.warning("Oversized request body rejected: %d bytes", length)
+        limit = self.security_config.request_size_limit_bytes
+        if length > limit:
+            LOGGER.warning("Oversized request body rejected: %d bytes (limit %d)", length, limit)
+            self._reject(413, "REQUEST_TOO_LARGE", "حجم الطلب أكبر من الحد المسموح.")
+            return {}
+        try:
+            enforce_content_length({"Content-Length": str(length)}, limit)
+        except RequestTooLarge:
+            self._reject(413, "REQUEST_TOO_LARGE", "حجم الطلب أكبر من الحد المسموح.")
             return {}
         raw = self.rfile.read(length)
         try:
@@ -166,6 +242,39 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             LOGGER.warning("Malformed JSON received: %s", err)
             return {}
         return parsed if isinstance(parsed, dict) else {}
+
+    def _enforce_rate_limit(self) -> bool:
+        """Check rate limit; stash remaining so _set_headers can attach X-RateLimit-* headers.
+
+        Returns True if allowed; sends 429 and returns False otherwise.
+        """
+        ip = client_ip(self)
+        allowed, remaining = self._rate_limiter().check(ip)
+        self._rl_remaining = (self.security_config.rate_limit_per_minute, max(0, remaining))
+        if not allowed:
+            # We cannot attach headers after send_response; emit a self-contained response.
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Retry-After", str(self.security_config.rate_limit_window_seconds))
+            wrap = wrap_security_headers({}, config=self.security_config, is_https=self._is_https())
+            for k, v in wrap.items():
+                self.send_header(k, v)
+            self.end_headers()
+            payload = json.dumps({
+                "success": False,
+                "error": {"code": "RATE_LIMITED", "message": "عدد الطلبات كتير جداً، استنى ثواني."},
+                "response_ar": "عدد الطلبات كتير جداً، استنى ثواني.",
+            }, ensure_ascii=False).encode("utf-8")
+            self.wfile.write(payload)
+            return False
+        return True
+
+    def _gate_dev_routes(self, path: str) -> bool:
+        """Block dev routes unless development_mode is enabled. Returns True if blocked."""
+        if is_dev_route(path) and not self.security_config.development_mode:
+            self._reject(404, "NOT_FOUND", "الطلب ده غير متاح في وضع الإنتاج.")
+            return True
+        return False
 
     def _send_json(self, status: int, data: Mapping[str, Any]) -> None:
         self._set_headers(status)
@@ -181,11 +290,17 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     # --- verbs ------------------------------------------------------------
     def do_OPTIONS(self) -> None:
+        # Preflight doesn't consume a rate limit token but gets CORS/security headers.
         self._set_headers(http.HTTPStatus.NO_CONTENT)
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/"):
+            if self._gate_dev_routes(path):
+                return
+            if not self._enforce_rate_limit():
+                return
         routes: dict[str, Callable[[str], None]] = {
             "/api/health": lambda _q: self._handle_get_health(),
             "/api/telemetry": lambda _q: self._handle_get_telemetry(),
@@ -212,6 +327,11 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/"):
+            if self._gate_dev_routes(path):
+                return
+            if not self._enforce_rate_limit():
+                return
         if path == "/api/chat":
             self._handle_post_chat()
             return
@@ -858,10 +978,11 @@ class ERPWebServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, server_address: tuple[str, int], runtime: AgentRuntime, *, settings=None, sessions=None) -> None:
+    def __init__(self, server_address: tuple[str, int], runtime: AgentRuntime, *, settings=None, sessions=None, security_config: SecurityConfig | None = None) -> None:
         self.runtime = runtime
         self.settings = settings or get_settings()
         self.sessions = sessions or get_session_store()
+        self.security_config = security_config or _security_config()
         self.start_time = time.time()
         super().__init__(server_address, ERPRequestHandler)
 
