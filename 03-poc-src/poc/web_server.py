@@ -76,7 +76,10 @@ from poc.web_security import (
 )
 
 LOGGER = logging.getLogger("erp.web_server")
-WEB_DIR = Path(__file__).resolve().parent / "web"
+_LEGACY_WEB_DIR = Path(__file__).resolve().parent / "web"
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+WEB_DIR = _FRONTEND_DIST if (_FRONTEND_DIST / "index.html").is_file() else _LEGACY_WEB_DIR
+LOGGER.info("web root: %s", WEB_DIR)
 API_VERSION = "1.1.0"
 MAX_BODY_BYTES = 128 * 1024
 COMPRESSIBLE = {".js", ".css", ".html", ".svg", ".json", ".map"}
@@ -311,6 +314,8 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             "/api/integrations": lambda _q: self._handle_get_integrations(),
             "/api/sessions": lambda _q: self._handle_get_sessions(),
             "/api/greeting": lambda _q: self._send_json(200, {"success": True, **greeting(str(self.settings.get("agent.dialect", "ar-EG")))}),
+            "/api/me": lambda _q: self._handle_get_me(),
+            "/api/history": self._handle_get_history,
         }
         handler = routes.get(path)
         if handler is not None:
@@ -500,6 +505,30 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             },
         )
 
+    def _handle_get_me(self) -> None:
+        self._send_json(
+            200,
+            {
+                "success": True,
+                "user_id": self.runtime.user_id,
+                "tenant_id": self.runtime.tenant_id or "poc_tenant_001",
+                "role": getattr(self.runtime, "role", None) or "sales_user",
+            },
+        )
+
+    def _handle_get_history(self, _query: str) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        sid = (params.get("session_id") or [""])[0]
+        if not sid:
+            self._send_json(400, {"success": False, "reason": "session_id مطلوب", "error_code": "MISSING_SESSION"})
+            return
+        try:
+            turns = list(self.sessions.turns(sid) or [])
+        except Exception:
+            turns = []
+        self._send_json(200, {"success": True, "turns": turns, "active_proposal": None})
+
     def _handle_get_sessions(self) -> None:
         rows = self.sessions.list_sessions(user_id=self.runtime.user_id, limit=25)
         self._send_json(200, {"success": True, "count": len(rows), "sessions": rows, "stats": self.sessions.stats()})
@@ -566,7 +595,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     # --- turn endpoints ---------------------------------------------------
     def _prepare_turn(self, body: Mapping[str, Any]) -> tuple[str, str | None]:
-        message = str(body.get("message", "")).strip()
+        message = str(body.get("message") or body.get("input") or "").strip()
         session_id = body.get("session_id") or self._session_id()
         max_chars = max(200, self.settings.int_of("agent.max_input_chars") or 2000)
         if len(message) > max_chars:

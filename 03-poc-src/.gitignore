@@ -22,3 +22,9 @@ node_modules/
 __pycache__/
 *.py[cod]
 .venv/
+node_modules
+frontend/node_modules
+
+# Frontend build outputs (built at deploy/runtime)
+frontend/dist/
+frontend/node_modules/
