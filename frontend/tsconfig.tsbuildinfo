@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/components/AuditTrail.tsx","./src/components/ChatPanel.tsx","./src/components/TelemetryStrip.tsx","./src/components/ToolsPanel.tsx"],"version":"5.9.3"}

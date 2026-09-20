@@ -171,3 +171,22 @@ See `README.md` ("2026-09-17 Improvements") and `02-poc/POST_AUDIT_HARDENING_REP
 
 `02-poc/FINAL_AUDIT_REPORT.md`, `02-poc/HARDENING_PLAN.md`: fail-closed gateway,
 idempotency lifecycle, hash-chained audit, confirmation store.
+
+## [2026-09-20] — phase 10: React/TypeScript frontend scaffold
+
+### Added
+- **`frontend/`** — Vite + React 18 + TypeScript cockpit replacement for the legacy
+  `poc/web/` HTML/JS UI. Strict CSP (self-only) baked into `index.html`; same-origin
+  `/api` proxy to `http://127.0.0.1:8765` in dev, RTL Arabic-first layout.
+- Components: `ChatPanel`, `TelemetryStrip`, `ToolsPanel`, `AuditTrail`.
+- Typed API client (`src/api.ts`) and shared DTOs (`src/types.ts`) that track the
+  Python gateway contract exactly — the client never invents IDs or success state.
+- `npm run build` → `dist/` produces ~150 KB JS / 5.5 KB CSS gzipped; `tsc --noEmit`
+  passes cleanly.
+
+### Proof
+```
+$ cd frontend && npm run build
+✓ 36 modules transformed · dist/index.html 0.89 KB · built in 971 ms
+```
+Backend unchanged: 494 tests passed, harness 50/50 PASS.
