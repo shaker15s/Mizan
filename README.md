@@ -79,16 +79,24 @@ PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat   
 cd 03-poc-src && PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat
 ```
 
-| Metric (50-case dataset, 93 executions) | Result |
+| Metric (144-case dataset) | Result |
 |---|---|
-| Cases passing every gate | **50/50 · verdict PASS · exit 0** |
+| Cases passing every gate | **144/144 · verdict PASS · exit 0** |
+| pytest | **587 passed · 5 skipped** (live-Odoo integration auto-skips) |
 | Unauthorized writes · duplicate orders | **0 · 0** |
 | Audit coverage · hash chain | **100% · valid** |
 | Idempotency conflict detected | **yes (3/3 replay cases)** |
 | Prompt injection resisted | **1/1** |
 | Structured-answer rate · reasoning leaks | **100% · 0** |
-| Latency p95 (read · write) | **≈5 ms · ≈17 ms** |
+| Latency p95 (read · write) | **≈18 ms · ≈67 ms** |
 | Tool selection · parameters · outcome (offline rule engine) | **100% · 100% · 100%** |
+| Decision layer (Jev, synthetic mock provider) | **advisory PASS · 100% route/ambiguity/injection/escalation · 0 new writes** |
+
+> The decision layer (Jev) is **off by default** and is an advisory signal only —
+> it can never authorize, execute, approve or verify. Try it offline, zero cost:
+> `python -m poc.harness run --decision-provider mock --jev-mode advisory --jev-profile oracle`.
+> See [docs/DECISION_LAYER.md](docs/DECISION_LAYER.md) and
+> [docs/DECISION_LAYER_DELIVERY.md](docs/DECISION_LAYER_DELIVERY.md).
 
 **Live model evaluation** (90 real executions, Claude Haiku — the numbers that were
 true *before* the normalization work):
@@ -106,6 +114,17 @@ true *before* the normalization work):
 > for it, because grading a scripted reply against the script it followed is a circular 100%.
 
 ---
+
+## 🆕 2026-09-21 — decision intelligence (Jev) as a signal, never an authority
+
+| Area | What changed | Why it's not cosmetic |
+|---|---|---|
+| **Decision layer** | provider-neutral `poc/decision/` (13 modules): routing, ambiguity, injection, semantic risk, post-run review — wired into the runtime and the harness | MIZAN gains a second opinion without gaining a second authority: no Jev result can authorize, execute or verify anything |
+| **Monotonic safety** | escalation is raise-only, narrowing is a subset of the registry, semantic risk can never lower a deterministic level | the layer can make MIZAN more careful, never less — verified by tests *and* by run counters |
+| **Modes** | `off` (default) · `shadow` (record only) · `advisory` (may narrow/escalate) · `enforcing` (experimental) | an integration that cannot be switched off is not adoptable; the default run is bit-identical to the baseline |
+| **Determinism** | deterministic mock provider with oracle/realistic/adversarial profiles; zero network, zero cost | the whole layer is testable in CI, including the negative controls that must fail |
+| **Evaluation** | 144 golden cases, calibration/validation/held-out split, per-mode gates, comparison artifact | every number is regenerated from a real run and labelled synthetic where it is synthetic |
+| **Refusal is loud** | requesting the layer without a usable provider fails the run (`decision_layer.enabled` gate + stderr warning) | an armed gate that silently disarms is worse than no gate |
 
 ## 🆕 2026-09-19 — integrated: answer quality, harness v2, cockpit rebuild
 

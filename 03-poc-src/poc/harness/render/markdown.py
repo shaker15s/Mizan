@@ -29,6 +29,57 @@ def _pct(value: Any) -> str:
         return str(value)
 
 
+def _decision_lines(decision: Mapping[str, Any], report: Mapping[str, Any]) -> list[str]:
+    """Markdown block for the decision layer, labelled with its provenance."""
+    quality = decision.get("decision") or {}
+    system = decision.get("system") or {}
+    safety = decision.get("safety") or {}
+    security = (quality.get("escalation") or {}).get("security") or {}
+    ambiguity = quality.get("ambiguity_detection") or {}
+    injection = quality.get("injection_detection") or {}
+    provider = decision.get("provider") or "?"
+    mode = decision.get("mode") or "?"
+    profile = decision.get("profile") or (report.get("decision") or {}).get("profile") or "?"
+    honesty = (
+        "synthetic provider — this checks the machinery, it is **not** a measurement of Jev"
+        if decision.get("synthetic")
+        else "live provider"
+    )
+    rows = [
+        ("route accuracy", _pct(quality.get("tool_selection_accuracy"))),
+        ("top-2 coverage", _pct(quality.get("top2_coverage"))),
+        ("abstention precision", _pct(quality.get("abstention_precision"))),
+        ("ambiguity precision / recall", f"{_pct(ambiguity.get('precision'))} / {_pct(ambiguity.get('recall'))}"),
+        ("injection precision / recall", f"{_pct(injection.get('precision'))} / {_pct(injection.get('recall'))}"),
+        ("security escalation precision / recall", f"{_pct(security.get('precision'))} / {_pct(security.get('recall'))}"),
+        ("disagreement rate", _pct(quality.get("disagreement", {}).get("rate"))),
+        ("fallback rate", _pct(system.get("fallback_rate"))),
+        ("provider error rate", _pct(system.get("provider_error_rate"))),
+        ("decision p95 (ms)", _fmt((system.get("latency_ms") or {}).get("decision", {}).get("p95"))),
+    ]
+    block = [
+        "",
+        "### Decision intelligence · طبقة القرار *(signal only — cannot authorize)*",
+        "",
+        f"`provider {provider}` · `mode {mode}` · `profile {profile}` · {honesty}",
+        "",
+        "| metric | value |",
+        "|---|---|",
+    ]
+    block += [f"| {label} | {value} |" for label, value in rows]
+    block += [
+        "",
+        "| safety invariant | value |",
+        "|---|---|",
+        f"| unauthorized writes | {_fmt(safety.get('unauthorized_writes', 0))} |",
+        f"| duplicate orders | {_fmt(safety.get('duplicate_orders', 0))} |",
+        f"| expected tool removed by narrowing | {_fmt(safety.get('narrowed_expected_tool_removed', 0))} |",
+        f"| risk downgrades | {_fmt(safety.get('escalation_lowered_deterministic_risk', 0))} |",
+        f"| quarantines | {_fmt(safety.get('quarantines', 0))} |",
+    ]
+    return block
+
+
 def render(report: Mapping[str, Any], *, diff: Mapping[str, Any] | None = None, title: str = "Mizan eval report") -> str:
     meta = report.get("meta") or {}
     metrics = report.get("metrics") or {}
@@ -50,6 +101,9 @@ def render(report: Mapping[str, Any], *, diff: Mapping[str, Any] | None = None, 
         f"dataset v{meta.get('dataset', {}).get('version')} · commit `{environment.get('commit')}`"
         + (" *(dirty)*" if environment.get("dirty") else "")
     )
+    decision = metrics.get("decision_layer") or {}
+    if decision.get("enabled"):
+        lines += _decision_lines(decision, report)
     lines += ["", "### Governance · الحوكمة", "", "| check | result |", "|---|---|"]
     lines.append(f"| unauthorized successful writes | {_fmt(governance.get('unauthorized_writes'))} |")
     lines.append(f"| duplicate orders from retry | {_fmt(governance.get('duplicate_orders'))} |")

@@ -5,6 +5,12 @@ stored in a dedicated table. Events are appended-only and never modified.
 
 This is the Evidence Graph precursor: every important server-side decision
 emits an event linked by trace_id/execution_id/action_id/parent_event_id.
+
+Decision-intelligence events (``decision_request`` … ``decision_disagreement``)
+record what the decision layer was asked, what it answered, how the router used
+it, and whether it disagreed with the language model. They are evidence *about*
+a decision: the deterministic policy decision, the authorization outcome and the
+gateway audit row remain the authority (plan §21, §22).
 """
 
 from __future__ import annotations
@@ -22,6 +28,13 @@ from poc.db.init import DEFAULT_DB_PATH, initialize
 
 
 class EvidenceType(str, Enum):
+    # --- decision intelligence (Jev); additive signals, never authority ---
+    DECISION_REQUEST = "decision_request"
+    DECISION_RESPONSE = "decision_response"
+    DECISION_ROUTING = "decision_routing"
+    DECISION_ESCALATION = "decision_escalation"
+    DECISION_DISAGREEMENT = "decision_disagreement"
+
     INTENT = "intent"
     PLAN = "plan"
     ENTITY_RESOLUTION = "entity_resolution"

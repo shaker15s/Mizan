@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-09-20T14:05:00Z",
+  "generated_at": "2026-09-21T14:39:29Z",
   "repository": "shaker15s/Mizan",
-  "commit_sha": "(uncommitted — see history)",
-  "branch": "arena/01a0bf03-mizan",
+  "commit_sha": "6b10c12",
+  "branch": "arena/01a0c43e-mizan",
   "runtime_version": "0.3.0-phases6b-12",
   "entries": [
     {
@@ -147,6 +147,79 @@
         }
       },
       "notes": "Phase 6b (144-case v2 dataset), 10 (React/TS frontend), 11 (storage abstraction), 12 (deploy hardening, backups)."
+    },
+    {
+      "evidence_id": "EV-006-decision-layer",
+      "timestamp": "2026-09-21T14:39:29Z",
+      "command": "cd 03-poc-src && .venv/bin/python -m pytest tests/ -q && .venv/bin/python -m poc.harness run --decision-provider mock --jev-mode advisory --jev-profile oracle --format json --quiet && .venv/bin/python -m poc.harness doctor",
+      "mode": "deterministic (no network, synthetic provider)",
+      "python_version": "3.11.2",
+      "os": "Linux/x86_64",
+      "environment": "sandbox",
+      "erp_version": "n/a (seeded ERP double; live-Odoo integration tests auto-skip)",
+      "model_provider": "n/a (FakeLLM scripted in deterministic mode)",
+      "model_id": "FakeLLM (scripted)",
+      "policy_version": "users.yaml v1",
+      "tool_registry_version": "1.1.0 (5 tools)",
+      "scenario_dataset_version": "2.0 (144 cases)",
+      "harness_version": "poc.harness 2.0.0",
+      "state_machine_version": "1.1.0",
+      "decision_layer": {
+        "spec_version": "1.0.0",
+        "threshold_version": "1.1.0",
+        "provider": "mock (synthetic)",
+        "profiles_available": [
+          "oracle",
+          "realistic",
+          "adversarial"
+        ],
+        "split": {
+          "calibration": 64,
+          "validation": 28,
+          "heldout": 52
+        },
+        "evidence_types": [
+          "decision_request",
+          "decision_response",
+          "decision_routing",
+          "decision_escalation",
+          "decision_disagreement"
+        ],
+        "authority": "signal_only"
+      },
+      "results": {
+        "pytest": "587 passed, 5 skipped",
+        "harness_deterministic": "144/144 PASS (baseline)",
+        "decision_runs": {
+          "baseline": "PASS",
+          "shadow": "PASS",
+          "advisory": "PASS",
+          "advisory_heldout": "PASS",
+          "enforcing": "PASS",
+          "realistic_negative_control": "GATE FAIL (intentional)",
+          "adversarial_negative_control": "FAIL (intentional)"
+        },
+        "doctor": "17 ok · 1 warning · 0 blockers",
+        "governance_parity": {
+          "unauthorized_writes": 0,
+          "duplicate_orders": 0,
+          "audit_coverage": "100%",
+          "audit_chain_valid": true,
+          "policy_enforcement_rate": "100%"
+        }
+      },
+      "artifacts": [
+        "03-poc-src/data/reports/decision-comparison.json",
+        "03-poc-src/data/reports/decision-comparison.md",
+        "03-poc-src/data/decision-calibration.json",
+        "03-poc-src/data/reports/dec2-*-latest.json"
+      ],
+      "caveats": [
+        "All decision-layer results use the synthetic mock provider; they are NOT a measurement of Jev.",
+        "Deterministic mode scripts the LLM from the expectation, so a narrowed tool set is not re-planned by a real model.",
+        "A live-provider calibration run is required before quoting any Jev accuracy or latency figure."
+      ],
+      "artifacts_note": "03-poc-src/data/reports/ is gitignored by repository convention; those artifacts are regenerated with the commands in the `command` field plus `python scripts/compare_decision_reports.py`. 03-poc-src/data/decision-calibration.json and the scenario/split documents are tracked."
     }
   ]
 }

@@ -73,6 +73,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fail-fast", action="store_true", help="stop at the first failing execution")
     parser.add_argument("--progress", action="store_true", help="print one line per execution while running")
     parser.add_argument("--json", action="store_true", help="print the raw report JSON instead of the dashboard")
+    # --- decision intelligence (Jev) ---------------------------------------
+    parser.add_argument("--decision-provider", choices=("off", "mock", "typesafe"), default="off",
+                        help="off = no decision layer (baseline); mock = deterministic offline profiles; typesafe = real Jev API")
+    parser.add_argument("--jev-mode", dest="decision_mode", choices=("off", "shadow", "advisory", "enforcing"), default="off",
+                        help="shadow = record only; advisory = may narrow/escalate/clarify; enforcing = gated (requires thresholds + key)")
+    parser.add_argument("--jev-profile", dest="decision_profile", choices=("oracle", "realistic", "adversarial"), default="oracle",
+                        help="synthetic provider quality for --decision-provider mock")
+    parser.add_argument("--jev-split", dest="decision_split", choices=("calibration", "validation", "heldout"), default=None,
+                        help="restrict scoring to one split of tests/decision_split.json (report records the split)")
+    parser.add_argument("--decision-scenarios", default=None, help="scenario document for the mock provider")
+    parser.add_argument("--decision-thresholds", default=None, help="JSON file of decision-layer thresholds")
     parser.add_argument("--version", action="version", version=f"mizan-harness {__version__}")
     return parser
 
@@ -109,6 +120,12 @@ def _options(args: argparse.Namespace) -> RunOptions:
         force_tool_choice="required" if args.force_tool_choice else None,
         thresholds_path=Path(args.thresholds) if args.thresholds else None,
         allow_cross_case_state=bool(getattr(args, "shared_env", False)),
+        decision_provider=getattr(args, "decision_provider", "off") or "off",
+        decision_mode=getattr(args, "decision_mode", "off") or "off",
+        decision_profile=getattr(args, "decision_profile", "oracle") or "oracle",
+        decision_split=getattr(args, "decision_split", None),
+        decision_scenarios=Path(args.decision_scenarios) if getattr(args, "decision_scenarios", None) else None,
+        decision_thresholds=Path(args.decision_thresholds) if getattr(args, "decision_thresholds", None) else None,
     )
 
 
@@ -118,6 +135,9 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
         dataset = load_dataset(args.dataset)
     except (DatasetError, OSError, json.JSONDecodeError) as exc:
         print(f"[harness] dataset error: {exc}", file=sys.stderr)
+        return 2
+    if args.decision_mode == "enforcing" and args.decision_provider == "off":
+        print("[harness] --jev-mode enforcing needs --decision-provider mock|typesafe.", file=sys.stderr)
         return 2
     if args.mode == LIVE and not args.model and not _provider_configured():
         print("[harness] --mode live needs POC_LLM_API_KEY (or POC_LLM_BASE_URL) in the environment.", file=sys.stderr)
@@ -131,7 +151,17 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
     options = _options(args)
     runner = Runner(dataset, selected, options)
     progress = _progress_printer(total=len(selected) * max(1, options.repeat_reads)) if (args.progress or (sys.stdout.isatty() and not args.quiet)) else None
-    print(f"[harness] {len(selected)}/{len(dataset.cases)} cases · mode={args.mode} · jobs={options.jobs} · erp={args.erp}", flush=True)
+    decision_note = "off" if options.decision_provider == "off" or options.decision_mode == "off" else f"{options.decision_provider}/{options.decision_mode}/{options.decision_profile}"
+    print(f"[harness] {len(selected)}/{len(dataset.cases)} cases · mode={args.mode} · jobs={options.jobs} · erp={args.erp} · decision={decision_note}", flush=True)
+    # An armed gate that silently disarms is worse than no gate: if the operator
+    # asked for screening and the layer could not be built, say so loudly here and
+    # let the `decision_layer.enabled` gate turn the run red (plan §27, §42).
+    armed_refusal = ""
+    if options.decision_provider != "off" and options.decision_mode != "off":
+        summary = runner.decision_summary()
+        if not summary.get("active", False):
+            armed_refusal = str(summary.get("refusal_reason") or (summary.get("build_errors") or ["unknown"])[0])[:200]
+            print(f"[harness] ⚠ decision layer requested but NOT active: {armed_refusal}", file=sys.stderr)
     try:
         result = runner.run(progress=progress)
     except Exception as exc:  # noqa: BLE001 - a harness crash must be loud, not silent
@@ -145,7 +175,11 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
 
     thresholds: dict[str, Any] = {}
     if not args.no_gates:
-        thresholds = load_thresholds(args.thresholds, mode=args.mode)
+        thresholds = load_thresholds(
+            args.thresholds,
+            mode=args.mode,
+            decision_mode=(None if getattr(args, "decision_provider", "off") == "off" else getattr(args, "decision_mode", "off")),
+        )
         for override in args.fail_under:
             if "=" not in override:
                 print(f"[harness] ignoring --fail-under {override!r} (expected path=value)", file=sys.stderr)
@@ -157,6 +191,7 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
                 thresholds[key.strip()] = raw.strip()
 
     report = ReportBuilder(result, dataset, options, selected, thresholds=thresholds).build()
+    report["decision"] = runner.decision_summary()
     baseline_path = None if args.baseline in (None, "", "latest") else args.baseline
     baseline = load_baseline(baseline_path if args.baseline else None)
     if args.baseline == "latest":
@@ -264,6 +299,23 @@ def doctor(args: argparse.Namespace) -> int:
     line("ok" if _provider_configured() else "warn", "provider", "POC_LLM_* present → --mode live usable" if _provider_configured() else "no provider env — --mode live unavailable")
     thresholds = load_thresholds(args.thresholds, mode=args.mode)
     line("ok" if thresholds else "warn", "gates", f"{len(thresholds)} thresholds from {args.thresholds or DEFAULT_THRESHOLDS_PATH}" if thresholds else f"no thresholds file at {DEFAULT_THRESHOLDS_PATH}")
+    try:
+        from poc.decision.profiles import load_scenarios, load_split
+        from poc.decision.router import DecisionConfig
+        from poc.settings import get_settings
+
+        scenarios = load_scenarios()
+        split = load_split()
+        config = DecisionConfig.from_settings(get_settings())
+        line("ok", "decision scenarios", f"{len(scenarios.cases)} scripted cases · profiles {sorted(scenarios.profiles)}")
+        line("ok", "decision split", f"{split.counts} (version {split.version})")
+        line(
+            "ok" if not config.enabled else "warn",
+            "decision layer",
+            f"provider={config.provider} mode={config.mode} key={'yes' if config.api_key else 'no'} (enabled only when explicitly configured)",
+        )
+    except Exception as exc:  # noqa: BLE001
+        line("fail", "decision layer", f"{type(exc).__name__}: {exc}")
     started = time.perf_counter()
     try:
         options = RunOptions(mode=DETERMINISTIC, repeat_reads=1, repeat_writes=1, confirm_ttl_seconds=30)
