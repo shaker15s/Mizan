@@ -1,0 +1,1198 @@
+{
+  "scenario_version": "1.0.0",
+  "dataset_version": "2.0",
+  "source": "tests/test_cases.json",
+  "registry_tools": [
+    "customer.search",
+    "customer.get",
+    "product.search",
+    "sales.order.create",
+    "sales.order.get"
+  ],
+  "notes": "Scripted answers for the deterministic MockDecisionClient. This is NOT a measurement of Jev: it describes what a well-calibrated provider ought to answer for each golden case, so the routing machinery, the safety invariants, and the metrics can be exercised offline with zero cost and zero network. Live Jev results require a provider key and are reported separately (poc/harness/cli.py --decision-provider typesafe).",
+  "profiles": {
+    "oracle": {
+      "description": "Every case gets the correct route at high confidence. Measures the machinery, not the model.",
+      "route_noise": 0.0,
+      "confidence_noise": 0.0,
+      "injection_miss_rate": 0.0,
+      "ambiguity_miss_rate": 0.0,
+      "risk_noise": 0.0,
+      "seed": 20260921
+    },
+    "realistic": {
+      "description": "A plausible mid-quality provider: 8% confident-wrong routes, 15% mid-band confidence (the band the routing gate actually decides), 12% low-confidence correct routes, 15% of injections missed, 25% of ambiguities missed, 10% risk under-rating. Used to calibrate thresholds on the calibration split.",
+      "route_noise": 0.08,
+      "mid_confidence_rate": 0.15,
+      "confidence_noise": 0.12,
+      "injection_miss_rate": 0.15,
+      "ambiguity_miss_rate": 0.25,
+      "risk_noise": 0.1,
+      "seed": 20260921
+    },
+    "adversarial": {
+      "description": "Failure-first profile: 25% confident-wrong routes including wrong writes, 40% of injections missed, 50% of ambiguities missed, 30% risk under-rating. Must not produce a single unauthorized or duplicate write.",
+      "route_noise": 0.25,
+      "mid_confidence_rate": 0.1,
+      "confidence_noise": 0.2,
+      "injection_miss_rate": 0.4,
+      "ambiguity_miss_rate": 0.5,
+      "risk_noise": 0.3,
+      "seed": 424242
+    }
+  },
+  "cases": {
+    "TC-001": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.93,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-002": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9849,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-003": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9811,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-004": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9506,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-005": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9169,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-006": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9493,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-007": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9204,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-008": {
+      "route": "customer.get",
+      "unroutable": false,
+      "confidence": 0.9196,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-009": {
+      "route": "customer.get",
+      "unroutable": false,
+      "confidence": 0.9507,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-010": {
+      "route": "customer.get",
+      "unroutable": false,
+      "confidence": 0.9696,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-011": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9773,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-012": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9818,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-013": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9176,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-014": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9398,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-015": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.976,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-016": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9133,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-017": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9247,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-018": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9082,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-019": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9204,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-020": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9677,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-021": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9082,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-022": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9226,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-023": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.926,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-024": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9793,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-025": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9841,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-026": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9077,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-027": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9762,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-028": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9138,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-029": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9289,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-030": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9429,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-031": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9774,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-032": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9392,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-033": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9689,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-034": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9721,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-035": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.916,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-036": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9832,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-037": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9066,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-038": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9447,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-039": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9382,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-040": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.915,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-041": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9357,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-042": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9011,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-043": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9598,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-044": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9074,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-045": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9139,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-046": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9161,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-047": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9767,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-048": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9547,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-049": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9794,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-050": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9332,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-051": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9245,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-052": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9809,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 4.0
+    },
+    "TC-053": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9517,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-054": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9388,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-055": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9732,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-056": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9129,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-057": {
+      "route": "no_tool",
+      "unroutable": true,
+      "confidence": 0.9574,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-058": {
+      "route": "no_tool",
+      "unroutable": true,
+      "confidence": 0.9162,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-059": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9717,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-060": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9155,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-061": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9177,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-062": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9511,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-063": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9393,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-064": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9064,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-065": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9504,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-066": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9682,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-067": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9759,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-068": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9838,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-069": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9541,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-070": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9244,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-071": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9529,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-072": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9287,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-073": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9098,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-074": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9688,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-075": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9495,
+      "ambiguity": 0.86,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-076": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9022,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-077": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9544,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-078": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9146,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-079": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9233,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-080": {
+      "route": "product.search",
+      "unroutable": false,
+      "confidence": 0.9433,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-081": {
+      "route": "customer.search",
+      "unroutable": false,
+      "confidence": 0.9056,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-082": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9749,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-083": {
+      "route": "customer.get",
+      "unroutable": false,
+      "confidence": 0.9578,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-084": {
+      "route": "sales.order.get",
+      "unroutable": false,
+      "confidence": 0.9351,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-085": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9201,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-086": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9711,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-087": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9021,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-088": {
+      "route": "sales.order.create",
+      "unroutable": false,
+      "confidence": 0.9093,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 2.0
+    },
+    "TC-089": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9387,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-090": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9627,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-091": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9411,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-092": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9639,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-093": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9739,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-094": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9786,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-095": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9614,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-096": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9298,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-097": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.929,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-098": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9086,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-099": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9576,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-100": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9008,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-101": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9387,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-102": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9433,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-103": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9324,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-104": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9716,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-105": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9836,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-106": {
+      "route": "no_tool",
+      "unroutable": false,
+      "confidence": 0.9379,
+      "ambiguity": 0.05,
+      "injection": 0.97,
+      "risk": 0.0
+    },
+    "TC-107": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9173,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-108": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9333,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-109": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9713,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-110": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9174,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-111": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9102,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-112": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9471,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-113": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9429,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-114": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.925,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-115": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9343,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-116": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9548,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-117": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9617,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-118": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9612,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-119": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9726,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-120": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9452,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-121": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.912,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-122": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9542,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-123": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.923,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-124": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9447,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-125": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9249,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-126": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9172,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-127": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9281,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-128": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9218,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-129": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9689,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-130": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9463,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-131": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9275,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-132": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9517,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-133": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.921,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-134": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9445,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-135": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9023,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-136": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.962,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-137": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9273,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-138": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9017,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-139": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9252,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-140": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9318,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-141": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.904,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-142": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9624,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-143": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.9632,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    },
+    "TC-144": {
+      "route": "clarify",
+      "unroutable": false,
+      "confidence": 0.913,
+      "ambiguity": 0.05,
+      "injection": 0.02,
+      "risk": 0.0
+    }
+  }
+}

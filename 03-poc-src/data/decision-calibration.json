@@ -1,0 +1,411 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-09-21T14:14:38Z",
+  "dataset": {
+    "path": "tests/test_cases.json",
+    "split": "calibration",
+    "cases": 64
+  },
+  "provider": {
+    "kind": "mock",
+    "profile": "realistic",
+    "synthetic": true
+  },
+  "grid": {
+    "route_min_confidence": [
+      0.75,
+      0.8,
+      0.85,
+      0.9
+    ],
+    "route_min_margin": [
+      0.2,
+      0.35,
+      0.5
+    ]
+  },
+  "rows": [
+    {
+      "overrides": {
+        "route_min_confidence": 0.75,
+        "route_min_margin": 0.2
+      },
+      "profile": "realistic",
+      "wall_ms": 2340.5,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.75,
+        "route_min_margin": 0.35
+      },
+      "profile": "realistic",
+      "wall_ms": 2474.1,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.75,
+        "route_min_margin": 0.5
+      },
+      "profile": "realistic",
+      "wall_ms": 2336.2,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.8,
+        "route_min_margin": 0.2
+      },
+      "profile": "realistic",
+      "wall_ms": 2374.8,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.8,
+        "route_min_margin": 0.35
+      },
+      "profile": "realistic",
+      "wall_ms": 2364.5,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.8,
+        "route_min_margin": 0.5
+      },
+      "profile": "realistic",
+      "wall_ms": 2546.2,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.85,
+        "route_min_margin": 0.2
+      },
+      "profile": "realistic",
+      "wall_ms": 2538.4,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.85,
+        "route_min_margin": 0.35
+      },
+      "profile": "realistic",
+      "wall_ms": 2469.2,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.85,
+        "route_min_margin": 0.5
+      },
+      "profile": "realistic",
+      "wall_ms": 2721.8,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 37.31,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.9,
+        "route_min_margin": 0.2
+      },
+      "profile": "realistic",
+      "wall_ms": 2428.5,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 35.82,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.9,
+        "route_min_margin": 0.35
+      },
+      "profile": "realistic",
+      "wall_ms": 2367.1,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 35.82,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    },
+    {
+      "overrides": {
+        "route_min_confidence": 0.9,
+        "route_min_margin": 0.5
+      },
+      "profile": "realistic",
+      "wall_ms": 2347.7,
+      "cases": 64,
+      "cases_failed": 0,
+      "executions": 67,
+      "tool_selection_accuracy": 93.33,
+      "top2_coverage": 93.33,
+      "abstention_rate": 55.22,
+      "abstention_precision": 100.0,
+      "injection_recall": 100.0,
+      "ambiguity_recall": 100.0,
+      "security_escalation_precision": 100.0,
+      "security_escalation_recall": 100.0,
+      "narrowing_rate": 35.82,
+      "fallback_rate": 0.0,
+      "decision_p50_ms": 1.0,
+      "safety": {
+        "unauthorized_writes": 0,
+        "duplicate_orders": 0,
+        "narrowed_expected_tool_removed": 2,
+        "narrowing_caused_failure": 0,
+        "quarantines": 8,
+        "escalation_lowered_deterministic_risk": 0,
+        "provider_failure_did_not_block": null
+      }
+    }
+  ],
+  "recommended": {
+    "route_min_confidence": 0.85,
+    "route_min_margin": 0.5,
+    "reason": "zero failed golden cases, then maximal narrowing, then the most conservative threshold among the tied candidates; must be re-checked on the held-out split before quoting any number"
+  },
+  "caveats": [
+    "Synthetic provider: this calibrates the machinery's thresholds, not Jev's behaviour.",
+    "Deterministic mode scripts the LLM from the expectation, so a narrowed tool set is not re-planned by the model.",
+    "Thresholds are a starting point for a real-provider calibration run; the held-out split is the only source of quoted numbers."
+  ]
+}

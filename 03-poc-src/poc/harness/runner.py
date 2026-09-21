@@ -33,6 +33,14 @@ from poc.harness.environment import EvalEnvironment, fresh_environment
 from poc.harness.graders import AttemptOutcome, failed_tags, grade_attempt
 from poc.harness.metrics import READ_CATEGORIES, WRITE_CATEGORIES, collect_metrics
 from poc.harness.records import AttemptRecord, CaseRecord, summarize_attempts
+from poc.harness.decisions import (
+    build_run_router,
+    collect_decision_metrics,
+    DecisionRunConfig,
+    decision_payload,
+)
+from poc.decision.profiles import DEFAULT_SCENARIOS_PATH, DEFAULT_SPLIT_PATH, load_split
+from poc.tool_contracts import get_registry
 from poc.agent_runtime import CONFIRMED_EXECUTION
 from poc.llm_client import (
     FakeLLMClient,
@@ -72,6 +80,13 @@ class RunOptions:
     force_tool_choice: str | None = None
     thresholds_path: Path | None = None
     allow_cross_case_state: bool = False
+    # --- decision intelligence (plan §30) ----------------------------------
+    decision_provider: str = "off"
+    decision_mode: str = "off"
+    decision_profile: str = "oracle"
+    decision_split: str | None = None
+    decision_scenarios: Path | None = None
+    decision_thresholds: Path | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -123,6 +138,18 @@ class Runner:
         self._aborted = threading.Event()
         self._temp_roots: list[Path] = []
         self._env_root_path: Path | None = None
+        self.decision = DecisionRunConfig(
+            provider=options.decision_provider,
+            mode=options.decision_mode,
+            profile=options.decision_profile,
+            split=options.decision_split,
+            scenarios_path=options.decision_scenarios or DEFAULT_SCENARIOS_PATH,
+            split_path=DEFAULT_SPLIT_PATH,
+            thresholds_path=options.decision_thresholds,
+        )
+        self._decision_error: str | None = None
+        self._decision_router_info: Any = None
+        self._loaded_split: Any = None
         # Parallel shards must never share state; sequential runs may opt in.
         self.allow_cross_case_state = bool(options.allow_cross_case_state) and options.jobs <= 1
 
@@ -188,6 +215,16 @@ class Runner:
         }
         metrics = collect_metrics(records, score_model=self.options.score_model, chain=chain)
         metrics["governance"]["duplicate_orders"] = sum(int(row.get("duplicate_orders", 0) or 0) for row in environments)
+        split = self._split()
+        metrics["decision_layer"] = collect_decision_metrics(
+            records,
+            cases=self.cases,
+            thresholds=(self._decision_router_info.thresholds if self._decision_router_info else None),
+            split_case_ids=(split.cases_for(self.decision.split) if split and self.decision.split else None),
+        )
+        if isinstance(metrics.get("decision_layer"), dict):
+            # Provenance that the renderers and the JSON consumer both need.
+            metrics["decision_layer"]["profile"] = self.decision.profile
         metrics["governance"]["idempotency_conflict_detected"] = self._conflict_probe()
         elapsed = time.perf_counter() - started
         metrics["runtime"] = {
@@ -220,11 +257,12 @@ class Runner:
             keep=self.options.keep_env,
             confirm_ttl_seconds=self.options.confirm_ttl_seconds,
         )
+        run_router = self._router_for_run()
         records: list[CaseRecord] = []
         for case in group:
             if self._aborted.is_set():
                 break
-            records.append(self._run_case(case, environment, progress=progress))
+            records.append(self._run_case(case, environment, progress=progress, decision_router=run_router.router))
         env_report = {
             "index": index,
             "case_id": group[0].id if len(group) == 1 else None,
@@ -258,12 +296,75 @@ class Runner:
         self._temp_roots = []
 
     # --- one case -----------------------------------------------------------
-    def _run_case(self, case: Case, environment: EvalEnvironment, *, progress: Any) -> CaseRecord:
+    def _router_for_run(self) -> Any:
+        """One router per shard: mock clients carry per-run state and must never
+        be shared across threads."""
+        routes = tuple(get_registry().names()) + ("clarify", "no_tool")
+        built = build_run_router(self.decision, cases=list(self.cases), routes=routes)
+        if built.errors:
+            self._decision_error = built.errors[0]
+        self._decision_router_info = built
+        return built
+
+    def decision_summary(self) -> dict[str, Any]:
+        """Secret-free provenance for the report.
+
+        The request and the outcome are kept separate on purpose: a run that
+        asked for the decision layer and got none must still record
+        ``provider=typesafe`` (what was asked) next to ``active=false`` (what
+        happened) and the refusal reason — never quietly read as ``off``.
+        """
+        requested = self.decision.describe()
+        payload: dict[str, Any] = {"config": requested, **requested}
+        if self._decision_router_info is None and self.decision.enabled:
+            # Build now so an armed-but-refused layer reports the real reason
+            # ("requires api_key") instead of a generic "not built".
+            try:
+                self._router_for_run()
+            except Exception as error:  # pragma: no cover - defensive
+                self._decision_error = f"{type(error).__name__}: {error}"
+        details: dict[str, Any] = {}
+        if self._decision_router_info is not None:
+            details = dict(self._decision_router_info.describe())
+        for key in ("active", "refusal_reason", "scenario_version", "threshold_fingerprint", "build_errors"):
+            if key in details:
+                payload[key] = details[key]
+        payload.setdefault("active", False)
+        if self._decision_error:
+            payload["build_error"] = self._decision_error
+        if not payload.get("refusal_reason"):
+            payload["refusal_reason"] = self._decision_error or (
+                "" if payload["active"] else ("decision layer not built" if self.decision.enabled else "decision layer off")
+            )
+        split = self._split()
+        if split is not None and self.decision.split:
+            payload["split"] = {
+                "name": self.decision.split,
+                "version": split.version,
+                "dataset_version": split.dataset_version,
+                "cases": len(split.cases_for(self.decision.split)),
+                "counts": dict(split.counts),
+            }
+        return payload
+
+    def _split(self) -> Any:
+        """The calibration/validation/held-out assignment, when one is requested."""
+        if not self.decision.split:
+            return None
+        if self._loaded_split is None:
+            try:
+                self._loaded_split = load_split(self.decision.split_path)
+            except Exception as error:  # noqa: BLE001 - a missing split must not abort a run
+                self._decision_error = self._decision_error or f"{type(error).__name__}: {error}"
+                self._loaded_split = False
+        return self._loaded_split or None
+
+    def _run_case(self, case: Case, environment: EvalEnvironment, *, progress: Any, decision_router: Any = None) -> CaseRecord:
         repeats = self.options.repeats_for(case)
         attempts: list[AttemptRecord] = []
         for run_index in range(1, repeats + 1):
             for plan in case.attempts:
-                record = self._run_attempt(case, plan, environment, run=run_index)
+                record = self._run_attempt(case, plan, environment, run=run_index, decision_router=decision_router)
                 attempts.append(record)
                 if progress is not None:
                     message = progress(case, record)
@@ -295,9 +396,9 @@ class Runner:
             failures=failures,
         )
 
-    def _run_attempt(self, case: Case, plan: Any, environment: EvalEnvironment, *, run: int) -> AttemptRecord:
+    def _run_attempt(self, case: Case, plan: Any, environment: EvalEnvironment, *, run: int, decision_router: Any = None) -> AttemptRecord:
         client = self._client_for(case)
-        runtime = environment.runtime(llm_client=client, user_id=case.user)
+        runtime = environment.runtime(llm_client=client, user_id=case.user, decision_router=decision_router)
         allowed = _policy_allows(runtime)
         erp = environment.odoo
         reads_before = erp.rpc_calls if erp else 0
@@ -311,6 +412,7 @@ class Runner:
         bound_arguments: dict[str, Any] = {}
         try:
             agent_result = runtime.process(case.input, history=[])
+            process_result = agent_result  # the turn that carried the decision trace
             gateway = agent_result.gateway_result
             # A confirmed execution no longer carries the proposal, so snapshot the
             # arguments the gateway actually bound and hashed at proposal time.
@@ -326,7 +428,12 @@ class Runner:
         total_ms = (time.perf_counter() - started) * 1000.0
 
         tool_name, arguments, status, error_code, audited = _observe(gateway, agent_result, environment, bound_arguments)
+        # Confirmation returns a *new* result; the decision trace belongs to the
+        # turn that was screened, so it is read from the process result.
+        decision = decision_payload(locals().get("process_result") or agent_result, case) if agent_result is not None else None
         latencies = {"total": round(total_ms, 1), "confirm": round(confirm_ms, 1)}
+        if decision is not None:
+            latencies["decision"] = float(decision.get("latency_ms") or 0.0)
         tokens = {"input": 0, "output": 0}
         if isinstance(client, _InstrumentedLLM):
             latencies["llm"] = round(client.last_ms, 1)
@@ -389,6 +496,7 @@ class Runner:
             kpis=len(outcome.answer.get("kpis") or []),
             error=error,
             stages=list(outcome.stages),
+            decision=decision,
         )
 
     # --- governance probes --------------------------------------------------

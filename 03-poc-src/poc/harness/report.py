@@ -39,6 +39,26 @@ CRITERIA_PATHS: tuple[tuple[str, str, str], ...] = (
     ("latency_ms.read.p95", "Read p95 (ms)", "down"),
     ("latency_ms.write.p95", "Write p95 (ms)", "down"),
     ("totals.flaky_cases", "Flaky cases", "down"),
+    # --- decision intelligence (Jev) ----------------------------------------
+    # Every one of these is N/A when the layer is off, and N/A never fails a
+    # gate (see ``criterion_checks``): the baseline run is not "missing" them.
+    ("decision_layer.decision.tool_selection_accuracy", "Jev route accuracy", "up"),
+    ("decision_layer.decision.top2_coverage", "Jev top-2 coverage", "up"),
+    ("decision_layer.decision.abstention_precision", "Jev abstention precision", "up"),
+    ("decision_layer.decision.ambiguity_detection.recall", "Ambiguity recall", "up"),
+    ("decision_layer.decision.ambiguity_detection.precision", "Ambiguity precision", "up"),
+    ("decision_layer.decision.injection_detection.recall", "Injection recall", "up"),
+    ("decision_layer.decision.injection_detection.precision", "Injection precision", "up"),
+    ("decision_layer.decision.escalation.security.recall", "Security escalation recall", "up"),
+    ("decision_layer.decision.escalation.security.precision", "Security escalation precision", "up"),
+    ("decision_layer.decision.disagreement.rate", "Jev/LLM disagreement", "down"),
+    ("decision_layer.system.fallback_rate", "Decision fallback rate", "down"),
+    ("decision_layer.system.provider_error_rate", "Decision provider errors", "down"),
+    ("decision_layer.system.latency_ms.decision.p95", "Decision p95 (ms)", "down"),
+    ("decision_layer.safety.unauthorized_writes", "Decision-path unauthorized writes", "down"),
+    ("decision_layer.safety.duplicate_orders", "Decision-path duplicate orders", "down"),
+    ("decision_layer.safety.narrowed_expected_tool_removed", "Expected tool removed by narrowing", "down"),
+    ("decision_layer.safety.escalation_lowered_deterministic_risk", "Escalation lowered deterministic risk", "down"),
 )
 
 
@@ -107,7 +127,19 @@ def flatten_criteria(metrics: Mapping[str, Any]) -> dict[str, Any]:
     return criteria
 
 
-def load_thresholds(path: Path | str | None = None, *, mode: str = "deterministic") -> dict[str, Any]:
+def load_thresholds(
+    path: Path | str | None = None,
+    *,
+    mode: str = "deterministic",
+    decision_mode: str | None = None,
+) -> dict[str, Any]:
+    """Merge the gate sections that apply to this run.
+
+    ``default`` always applies, the LLM ``mode`` section applies to its run, and
+    when the decision layer is enabled its ``decision_<mode>`` section (plus
+    ``decision_any``) applies too. A gate whose metric is N/A is skipped, so
+    enabling a section for a run that does not measure the metric is harmless.
+    """
     candidate = Path(path) if path else DEFAULT_THRESHOLDS_PATH
     if not candidate.exists():
         return {}
@@ -116,7 +148,10 @@ def load_thresholds(path: Path | str | None = None, *, mode: str = "deterministi
     except (OSError, json.JSONDecodeError):
         return {}
     merged: dict[str, Any] = dict(document.get("default") or {})
-    merged.update(dict((document.get(mode) or {})))
+    merged.update(dict(document.get(mode) or {}))
+    if decision_mode and decision_mode != "off":
+        merged.update(dict(document.get("decision_any") or {}))
+        merged.update(dict(document.get(f"decision_{decision_mode}") or {}))
     return {key: value for key, value in merged.items() if not key.startswith("_")}
 
 
@@ -202,7 +237,7 @@ class ReportBuilder:
             "duration_ms": self.run_result.get("duration_ms"),
             **self.extra,
         }
-        return {
+        document = {
             "meta": meta,
             "criteria": flatten_criteria(metrics),
             "metrics": metrics,
@@ -214,6 +249,11 @@ class ReportBuilder:
             "cases": [record.to_dict() for record in records],
             "environments": self.run_result.get("environments", []),
         }
+        if self.extra.get("decision") is not None:
+            # Stable top-level schema for the decision layer's provenance, the
+            # same key the CLI writes, so every build path produces one shape.
+            document["decision"] = self.extra["decision"]
+        return document
 
 
 def _default_model_name(mode: str) -> str:

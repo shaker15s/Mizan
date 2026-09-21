@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from poc.agent_runtime import AgentRuntime
 from poc.authz import PolicyEngine
+from poc.decision.router import build_router as build_decision_router
 from poc.db.init import DEFAULT_DB_PATH, initialize
 from poc.gateway import ToolGateway
 from poc.llm_client import LLMClientProtocol, build_llm_client
@@ -72,6 +73,24 @@ def build_llm_client_from_settings(settings=None) -> LLMClientProtocol:
     )
 
 
+def build_decision_router_from_settings(settings=None, *, registry=None, evidence_store=None, client=None):
+    """Construct the decision layer from the typed settings store.
+
+    ``decision.provider=off`` (the default) builds a router that reports itself
+    disabled and never calls a provider, so the application behaves exactly like
+    the un-integrated baseline until an operator opts in. No environment
+    variable can enable it on its own: the provider has to be selected in the
+    settings (or explicitly passed here).
+    """
+    settings = settings or get_settings()
+    return build_router(
+        settings=settings,
+        registry=registry or get_registry(),
+        evidence_store=evidence_store,
+        client=client,
+    )
+
+
 def build_runtime(
     *,
     user_id: str | None = None,
@@ -80,6 +99,7 @@ def build_runtime(
     llm_client: LLMClientProtocol | None = None,
     odoo_client_factory: Callable[[str, str], object] | None = None,
     settings=None,
+    decision_router: object | None = None,
 ) -> AgentRuntime:
     """Construct the agent and all server-owned boundaries."""
     load_dotenv(SRC_ROOT / ".env")
@@ -101,14 +121,28 @@ def build_runtime(
         resolved_client: LLMClientProtocol = SimulatedLLMClient()
     else:
         resolved_client = llm_client or build_llm_client_from_settings(settings)
+    gateway = ToolGateway(
+        registry=get_registry(),
+        policy_engine=PolicyEngine(),
+        db_path=db_path,
+        confirm_ttl_seconds=settings.int_of("governance.confirm_ttl_seconds") or None,
+    )
+    # One evidence store per process, shared by the gateway and the decision
+    # layer, so DECISION_* events land in the same hash-chained audit trail as
+    # the actions they screened.
+    evidence_store = getattr(gateway, "evidence_store", None)
+    resolved_decision = (
+        decision_router
+        if decision_router is not None
+        else build_decision_router_from_settings(settings, registry=get_registry(), evidence_store=evidence_store)
+    )
+    if resolved_decision is not None and getattr(resolved_decision, "evidence_store", None) is None:
+        resolved_decision.evidence_store = evidence_store
     return AgentRuntime(
         llm_client=resolved_client,
-        gateway=ToolGateway(
-            registry=get_registry(),
-            policy_engine=PolicyEngine(),
-            db_path=db_path,
-            confirm_ttl_seconds=settings.int_of("governance.confirm_ttl_seconds") or None,
-        ),
+        gateway=gateway,
+        decision_router=resolved_decision,
+        evidence_store=evidence_store,
         registry=get_registry(),
         user_id=resolved_user_id,
         tenant_id=resolved_tenant_id,

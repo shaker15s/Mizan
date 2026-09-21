@@ -1,8 +1,12 @@
-# CURRENT_STATE — MIZAN POC as of commit `fb869d6`
+# CURRENT_STATE — MIZAN POC as of commit `6b10c12` (+ uncommitted work)
 
-**Generated:** 2026-09-20
-**Commit:** `fb869d6dd63404bd37361c7b7954086cd32d95a5` on `arena/01a0bf03-mizan`
-**Baseline evidence:** `/evidence/EVIDENCE_MANIFEST.json` → EV-001, EV-002
+**Generated:** 2026-09-21
+**Commit:** `6b10c12` (working tree includes the decision-layer work)
+**Baseline evidence:** `/evidence/EVIDENCE_MANIFEST.json` → EV-001 … EV-006
+
+> Numbers below were re-verified on 2026-09-21 against the working tree. Where an
+> older figure appears later in the document, the tables in §1 and §6 are the
+> ones to trust.
 
 This document describes **what is actually in the repository today** — not the target architecture. It is verified against the code on disk.
 
@@ -15,8 +19,9 @@ This document describes **what is actually in the repository today** — not the
 01-spec/               Product requirements document (PRD)
 02-poc/                Design docs, security model, audit reports, hardening notes
 03-poc-src/poc/        POC runtime (Python, zero frameworks)
-03-poc-src/tests/      442 passing tests across unit/integration/scenario/harness
+03-poc-src/tests/      587 passing tests (5 live-Odoo tests auto-skip) + 144-case dataset
 03-poc-src/poc/harness Evaluation harness (deterministic / simulated / live modes)
+03-poc-src/poc/decision Decision layer (Jev) — provider-neutral signal, never an authority
 03-poc-src/poc/web/    Vanilla-ES web cockpit (4 files, no build, no CDN)
 docs/                  Architectural documentation (this document and siblings)
 evidence/              Canonical evidence manifest
@@ -164,12 +169,20 @@ There is **no single canonical state machine** today. State is split across seve
 
 ## 6. Test baseline (verified)
 
-From EV-001 and EV-002:
+Re-verified 2026-09-21 (EV-006):
 
 ```text
-pytest:        442 passed, 0 failed, 5 skipped (live-Odoo integration)
-harness det:   50/50 PASS
+pytest:        587 passed, 0 failed, 5 skipped (live-Odoo integration)
+harness det:   144/144 PASS (dataset v2.0)
+decision:      baseline/shadow/advisory/heldout/enforcing PASS (synthetic provider)
+               realistic (negative control) GATE FAIL · adversarial (negative control) FAIL
+doctor:        17 checks ok · 1 warning · 0 blockers
 ```
+
+The two red decision runs are intentional negative controls: a deliberate
+mid-quality and hostile provider must fail the gates, otherwise the gates would
+be decorative. See `docs/DECISION_LAYER.md` and
+`03-poc-src/data/reports/decision-comparison.md`.
 
 Safety metrics (deterministic harness), all green:
 
@@ -241,4 +254,23 @@ The next milestones are:
 4. **Execution Lease** (Phase 5) — separate lease from idempotency reservation with heartbeat + expiry.
 5. Then continue through policy 2.0, evidence graph, API hardening, etc.
 
-We will preserve backward compatibility during the migration (strangler pattern — plan §100). Existing 442 tests and 50 harness cases must continue to pass.
+We will preserve backward compatibility during the migration (strangler pattern — plan §100). Existing tests and the 144-case harness dataset must continue to pass.
+
+---
+
+## 10. Decision layer (Jev) — added since the previous revision
+
+A provider-neutral decision layer lives in `03-poc-src/poc/decision/` (13 modules)
+and is wired into the runtime, the web server, and the harness:
+
+* **Default off.** `decision.provider=off` + `decision.mode=off` keeps the system
+  identical to the un-integrated baseline; no environment variable can enable it.
+* **Four modes:** `off`, `shadow` (record only), `advisory` (may narrow/escalate),
+  `enforcing` (experimental, stricter gates). See `docs/DECISION_LAYER.md`.
+* **Signal, never authority.** The layer cannot authorize, execute, approve or
+  verify; the gateway remains the final boundary, and escalation is raise-only.
+* **Evidence:** `DECISION_REQUEST/RESPONSE/ROUTING/ESCALATION/DISAGREEMENT` events
+  are appended to the existing hash-chained evidence log.
+* **Evaluation:** the same 144 golden cases, three synthetic provider profiles,
+  a three-way comparison artifact, and per-mode release gates
+  (`decision_any` / `decision_shadow` / `decision_advisory` / `decision_enforcing`).

@@ -279,6 +279,27 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _decision_health(self) -> Mapping[str, Any]:
+        """Read-only status of the decision layer (secret-free).
+
+        Exposed so an operator can see whether screening is on, which provider
+        and mode are active, and that the layer claims no authority. It is a
+        *view*: nothing here can change identity, policy, or the gateway.
+        """
+        runtime = getattr(self, "runtime", None)
+        router = getattr(runtime, "decision_router", None)
+        if router is None:
+            return {
+                "enabled": False,
+                "reason": "decision layer not wired",
+                "authority": "signal_only",
+                "authority_notice": "The decision layer cannot authorize, execute, approve, or verify.",
+            }
+        try:
+            return dict(router.health())
+        except Exception as error:  # noqa: BLE001 - health must never 500
+            return {"enabled": False, "error": type(error).__name__, "authority": "signal_only"}
+
     def _send_json(self, status: int, data: Mapping[str, Any]) -> None:
         self._set_headers(status)
         try:
@@ -306,6 +327,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
         routes: dict[str, Callable[[str], None]] = {
             "/api/health": lambda _q: self._handle_get_health(),
+            "/api/decision": lambda _q: self._send_json(200, {"success": True, "decision": self._decision_health()}),
             "/api/telemetry": lambda _q: self._handle_get_telemetry(),
             "/api/tools": lambda _q: self._handle_get_tools(),
             "/api/audit": self._handle_get_audit,

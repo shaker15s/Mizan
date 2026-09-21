@@ -42,6 +42,9 @@ class AttemptRecord:
     kpis: int = 0
     error: str | None = None
     stages: list[dict[str, Any]] = field(default_factory=list)
+    #: Decision-layer trace for this attempt (None when the layer is off).
+    #: Flattened, redacted, and never a source of truth for the ERP result.
+    decision: dict[str, Any] | None = None
 
     @property
     def total_ms(self) -> float:

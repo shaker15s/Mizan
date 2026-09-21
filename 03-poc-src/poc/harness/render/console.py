@@ -208,6 +208,14 @@ def render(report: Mapping[str, Any], *, diff: Mapping[str, Any] | None = None, 
     ]
     add(_two_columns(rows, total, paint))
 
+    # --- decision intelligence ----------------------------------------------
+    decision = metrics.get("decision_layer") or {}
+    if decision.get("enabled"):
+        add("")
+        add(rule(paint, total, "DECISION INTELLIGENCE · طبقة القرار (signal only)", char="─"))
+        add("  " + paint(_decision_provenance(decision, report), DIM))
+        add(_decision_body(decision, paint, total))
+
     # --- model intelligence -------------------------------------------------
     add("")
     add(rule(paint, total, "MODEL INTELLIGENCE · ذكاء النموذج", char="─"))
@@ -319,6 +327,44 @@ def render(report: Mapping[str, Any], *, diff: Mapping[str, Any] | None = None, 
             add(paint(f"  → {path}", MAGENTA))
     add("")
     return "\n".join(lines)
+
+
+def _decision_provenance(decision: Mapping[str, Any], report: Mapping[str, Any]) -> str:
+    """One line naming the provider, the mode and the honesty label."""
+    provider = decision.get("provider") or "?"
+    mode = decision.get("mode") or "?"
+    profile = decision.get("profile") or (report.get("decision") or {}).get("profile") or "?"
+    label = "synthetic provider — machinery check, NOT a Jev measurement" if decision.get("synthetic") else "live provider"
+    return f"  provider {provider} · mode {mode} · profile {profile} · {label}"
+
+
+def _decision_body(decision: Mapping[str, Any], paint: Paint, total: int) -> str:
+    quality = decision.get("decision") or {}
+    system = decision.get("system") or {}
+    safety = decision.get("safety") or {}
+    escalations = (quality.get("escalation") or {}).get("security") or {}
+    ambiguity = quality.get("ambiguity_detection") or {}
+    injection = quality.get("injection_detection") or {}
+    rows = [
+        ["route accuracy", pct(quality.get("tool_selection_accuracy"))],
+        ["top-2 coverage", pct(quality.get("top2_coverage"))],
+        ["abstention precision", pct(quality.get("abstention_precision"))],
+        ["disagreement", pct((quality.get("disagreement") or {}).get("rate"))],
+        ["ambiguity P/R", f"{pct(ambiguity.get('precision'))} / {pct(ambiguity.get('recall'))}"],
+        ["injection P/R", f"{pct(injection.get('precision'))} / {pct(injection.get('recall'))}"],
+        ["escalation P/R", f"{pct(escalations.get('precision'))} / {pct(escalations.get('recall'))}"],
+        ["decision p95", num((system.get("latency_ms") or {}).get("decision", {}).get("p95"), "ms")],
+        ["fallback rate", pct(system.get("fallback_rate"))],
+        ["provider errors", pct(system.get("provider_error_rate"))],
+    ]
+    body = _two_columns(rows, total, paint)
+    unsafe = bool(safety.get("unauthorized_writes") or safety.get("duplicate_orders") or safety.get("narrowed_expected_tool_removed"))
+    safety_line = (
+        f"  safety: unauthorized {safety.get('unauthorized_writes', 0)} · duplicates {safety.get('duplicate_orders', 0)} · "
+        f"expected tool removed {safety.get('narrowed_expected_tool_removed', 0)} · "
+        f"risk downgrades {safety.get('escalation_lowered_deterministic_risk', 0)} · quarantines {safety.get('quarantines', 0)}"
+    )
+    return body + "\n" + "  " + paint(safety_line.strip(), RED if unsafe else DIM)
 
 
 def _case_latencies(report: Mapping[str, Any], *, channel: str) -> list[float]:

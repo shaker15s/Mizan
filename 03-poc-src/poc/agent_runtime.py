@@ -54,6 +54,13 @@ from poc.llm_client import (
 from poc.prompts import build_composer_prompt, build_system_prompt
 from poc.tool_contracts import ToolRegistry, get_registry
 from poc.errors import translate_error, translate_odoo_exception, StructuredError
+from poc.decision.policy import (
+    ESCALATION_CLARIFY,
+    ESCALATION_QUARANTINE,
+    ESCALATION_STEP_UP,
+    ESCALATION_WATCH,
+    DecisionOutcome,
+)
 
 TOOL_CALL = "tool_call"
 TEXT_ONLY = "text_only"
@@ -64,6 +71,15 @@ MULTIPLE_TOOL_CALLS = "multiple_tool_calls"
 CONFIRMED_EXECUTION = "confirmed_execution"
 CONFIRMATION_DECLINED = "confirmation_declined"
 CONFIRMATION_AMENDED = "confirmation_amended"
+
+# Decision-intelligence outcomes. Both are *server-owned* outcomes produced by a
+# monotonic escalation, never by a provider's opinion of what should happen:
+#   DECISION_QUARANTINED   — an additive security signal exceeded the quarantine
+#                            threshold, so nothing was routed or executed.
+#   DECISION_CLARIFICATION — an ambiguous *write* intent was not turned into a
+#                            proposal; the user is asked to clarify instead.
+DECISION_QUARANTINED = "decision_quarantined"
+DECISION_CLARIFICATION = "decision_clarification"
 
 # Arabic response templates keyed by gateway result status. The Answer composer
 # is the primary renderer; these remain the one-line fallback used when a
@@ -78,9 +94,20 @@ _RESPONSE_TEMPLATES = {
     DENIED: "بعتذر لحضرتك، مفيش صلاحية لتنفيذ العملية دي:\n{detail}",
     CONFIRMED_EXECUTION: "تم تنفيذ العملية بنجاح بعد تأكيد حضرتك:\n{detail}",
     CONFIRMATION_DECLINED: "تمام، تم إلغاء العملية بناءً على طلبك.",
+    DECISION_QUARANTINED: "الطلب ده اتحوّل لمراجعة أمنية ومحتاج تأكيد بشري قبل أي تنفيذ. مفيش أي عملية اتنفذت.",
+    DECISION_CLARIFICATION: "محتاج توضيح بسيط قبل ما أنفذ أي حاجة: تقصد إيه بالظبط؟",
 }
 
 _READ_TOOLS = frozenset({"customer.search", "customer.get", "product.search", "sales.order.get"})
+
+# Cheap deterministic operation-kind hints. They are used ONLY to decide whether
+# the decision layer may narrow the LLM's candidate tool set — never as an
+# authorization input. A conflict between a decision signal and one of these
+# hints disables narrowing (see poc.decision.policy.compute_route_plan).
+_WRITE_INTENT_TOKENS = (
+    "اعمل", "انشئ", "أنشئ", "اضف", "أضف", "سجل", "اطلق", "نفذ", "create", "new order", "update", "عدل", "احذف", "delete",
+)
+_WRITE_INTENT_NOUNS = ("امر بيع", "أمر بيع", "اوردر", "طلب بيع", "order", "فاتوره", "فاتورة")
 
 _INTERNAL_LEAK_MARKERS = (
     "Analyze User Input",
@@ -113,6 +140,9 @@ class AgentResult:
     timings: Mapping[str, Any] = field(default_factory=dict)
     engine: str = "unknown"
     repaired: bool = False
+    #: Decision-intelligence trace for this turn (None when the layer is off).
+    #: Purely observational: it explains the route, it never authorizes one.
+    decision: DecisionOutcome | None = None
 
     @property
     def structured_error(self):
@@ -184,6 +214,8 @@ class AgentRuntime:
         history_turns: int = 0,
         enable_narrative: bool = False,
         max_repair_turns: int = 0,
+        decision_router: Any = None,
+        evidence_store: Any = None,
     ) -> None:
         self.llm_client = llm_client
         self.gateway = gateway
@@ -197,6 +229,10 @@ class AgentRuntime:
         self.history_turns = int(history_turns or 0)
         self.enable_narrative = bool(enable_narrative)
         self.max_repair_turns = int(max_repair_turns or 0)
+        # Additive decision intelligence (Jev). ``None`` or a router in ``off``
+        # mode means MIZAN behaves exactly like the un-integrated baseline.
+        self.decision_router = decision_router
+        self.evidence_store = evidence_store
 
     # --- configuration plumbing (settings panel) --------------------------------
     @property
@@ -286,6 +322,28 @@ class AgentRuntime:
         stage("intake", chars=len(user_input or ""))
         system = self._build_system_prompt()
         tools = self._tool_definitions()
+
+        # Decision screening runs BEFORE the language model and before any
+        # gateway call. It can narrow, escalate, or refuse to route — it can
+        # never authorize, execute, or verify anything (plan §10, §42).
+        decision = self._screen_decision(user_input, tools, stage)
+        blocked = self._decision_gate(user_input, decision, stage)
+        if blocked is not None:
+            timings = dict(blocked.timings or {})
+            timings.setdefault("total_ms", round((time.perf_counter() - started) * 1000, 1))
+            return AgentResult(
+                outcome=blocked.outcome,
+                response_ar=blocked.response_ar,
+                gateway_result=None,
+                tool_call=None,
+                answer=blocked.answer,
+                stages=tuple(stages),
+                timings=timings,
+                engine=self.engine,
+                decision=decision,
+            )
+        tools = self._apply_route(decision, tools, stage)
+
         messages = self._messages(user_input, history)
         force_tool_choice = bool(self.settings.bool_of("model.force_tool_choice")) if (self.settings and self._looks_like_write(user_input)) else False
         stage("llm_call", tools=len(tools), history=len(messages) - 1, force_tool=force_tool_choice)
@@ -304,6 +362,7 @@ class AgentRuntime:
                 stages=tuple(stages),
                 timings=timings,
                 engine=self.engine,
+                decision=decision,
             )
         llm_ms = (time.perf_counter() - llm_started) * 1000.0
 
@@ -330,6 +389,7 @@ class AgentRuntime:
                 stages=tuple(stages),
                 timings=timings,
                 engine=self.engine,
+                decision=decision,
             )
         if len(tool_calls) > 1:
             timings = {"llm_ms": round(llm_ms, 1)}
@@ -345,9 +405,11 @@ class AgentRuntime:
                 stages=tuple(stages),
                 timings=timings,
                 engine=self.engine,
+                decision=decision,
             )
 
         call = tool_calls[0]
+        decision = self._record_disagreement(decision, call.name, stage)
         stage("schema_validation", tool=call.name)
         version, error, reason = self._validate_tool_call(call)
         if error and self.max_repair_turns > 0:
@@ -372,6 +434,7 @@ class AgentRuntime:
                 stages=tuple(stages),
                 timings=timings,
                 engine=self.engine,
+                decision=decision,
             )
 
         stage("authz")
@@ -417,6 +480,7 @@ class AgentRuntime:
                 stages=tuple(stages),
                 timings=timings,
                 engine=self.engine,
+                decision=decision,
             )
         stage("execute", status=gateway_result.status, tool=gateway_result.tool_name)
         if gateway_result.proposal is not None:
@@ -447,7 +511,9 @@ class AgentRuntime:
             stages=tuple(stages),
             timings={"llm_ms": round(llm_ms, 1), "gateway_ms": round((time.perf_counter() - gw_started) * 1000, 1)},
             engine=self.engine,
+            decision=decision,
         )
+        self._attach_decision_governance(answer, decision)
         if self.enable_narrative:
             result = self._attach_narrative(result, gateway_result, answer, stages, stage, started, user_input=user_input, on_delta=on_delta)
         stages_meta = dict(result.timings or {})
@@ -464,7 +530,180 @@ class AgentRuntime:
             timings=stages_meta,
             engine=result.engine,
             repaired=result.repaired,
+            decision=decision,
         )
+
+    # --- decision intelligence (additive signal only) -------------------------
+    def decision_health(self) -> dict[str, Any]:
+        """Provider-neutral decision-layer health for telemetry surfaces."""
+        if self.decision_router is None:
+            return {"enabled": False, "mode": "off", "provider": "off", "authority": "signal_only"}
+        try:
+            return dict(self.decision_router.health())
+        except Exception as error:  # pragma: no cover - health must never raise
+            return {"enabled": False, "error": type(error).__name__, "authority": "signal_only"}
+
+    def _decision_on(self) -> bool:
+        router = self.decision_router
+        return bool(router is not None and getattr(router, "enabled", False))
+
+    def _write_intent_hint(self, text: str) -> bool:
+        """Cheap deterministic hint about the *kind* of operation requested.
+
+        Used only to decide whether a decision signal may narrow the tool set.
+        It never authorizes, and it is never a policy input.
+        """
+        probe = (text or "").lower()
+        if "sales.order.create" in probe:
+            return True
+        verb = any(token in probe for token in _WRITE_INTENT_TOKENS)
+        noun = any(token in probe for token in _WRITE_INTENT_NOUNS)
+        if verb and noun:
+            return True
+        # «اعمل ... من المنتج 55 لعدد 2» carries the write verb and the product
+        # noun but no explicit order word; the runtime already treats that shape
+        # as a write, so the hint must agree or narrowing would hide the tool.
+        return verb and any(token in probe for token in ("منتج", "صنف", "product")) and bool(
+            re.search(r"\d+", probe)
+        )
+
+    def _screen_decision(self, user_input: str, tools: list[LLMToolDefinition], stage: Callable[..., None]) -> DecisionOutcome | None:
+        if not self._decision_on():
+            return None
+        router = self.decision_router
+        write_intent = self._write_intent_hint(user_input)
+        stage("decision_screening", provider=getattr(router, "provider", ""), mode=getattr(router, "mode", ""), write_intent=write_intent)
+        started = time.perf_counter()
+        try:
+            outcome = router.screen(
+                user_input,
+                all_tools=[definition.name for definition in tools],
+                write_intent=write_intent,
+                read_intent_hint=not write_intent,
+                channel="web",
+            )
+        except Exception as error:  # a decision outage is never a MIZAN outage
+            stage("decision_error", error=type(error).__name__)
+            return None
+        stage(
+            "decision_done",
+            provider=getattr(outcome, "provider", ""),
+            latency_ms=round((time.perf_counter() - started) * 1000, 1),
+            strategy=getattr(getattr(outcome, "route", None), "strategy", ""),
+            escalation=getattr(getattr(outcome, "escalation", None), "level", ""),
+            fallback=bool(getattr(outcome, "fallback", False)),
+        )
+        return outcome
+
+    def _decision_gate(self, user_input: str, decision: DecisionOutcome | None, stage: Callable[..., None]) -> AgentResult | None:
+        """Apply the *only* two behaviours a decision signal may force.
+
+        Both are monotonic (they add scrutiny; they never remove a control) and
+        both are server-owned outcomes. Everything else the signal produces is a
+        hint: a narrowed candidate set, an escalation notice, or a measurement.
+        """
+        if decision is None:
+            return None
+        level = getattr(getattr(decision, "escalation", None), "level", "")
+        reasons = tuple(getattr(getattr(decision, "escalation", None), "reasons", ()) or ())
+
+        if level == ESCALATION_QUARANTINE:
+            stage("decision_quarantine", reasons=list(reasons))
+            answer = compose_answer(outcome=DECISION_QUARANTINED, timings={**dict(self._decision_timings(decision)), "engine": self.engine})
+            self._attach_decision_governance(answer, decision)
+            return AgentResult(
+                outcome=DECISION_QUARANTINED,
+                response_ar=_RESPONSE_TEMPLATES[DECISION_QUARANTINED],
+                gateway_result=None,
+                answer=answer,
+                timings=self._decision_timings(decision),
+                engine=self.engine,
+                decision=decision,
+            )
+
+        if level == ESCALATION_CLARIFY and self._write_intent_hint(user_input):
+            # An ambiguous *write* is never turned into a proposal. A read stays
+            # on the existing path (search → disambiguation), which is exactly
+            # the runtime clarification logic the plan asks us to keep (plan §14).
+            stage("decision_clarification", reasons=list(reasons))
+            answer = compose_answer(outcome=DECISION_CLARIFICATION, timings={**dict(self._decision_timings(decision)), "engine": self.engine})
+            self._attach_decision_governance(answer, decision)
+            return AgentResult(
+                outcome=DECISION_CLARIFICATION,
+                response_ar=_RESPONSE_TEMPLATES[DECISION_CLARIFICATION],
+                gateway_result=None,
+                answer=answer,
+                timings=self._decision_timings(decision),
+                engine=self.engine,
+                decision=decision,
+            )
+        return None
+
+    def _apply_route(self, decision: DecisionOutcome | None, tools: list[LLMToolDefinition], stage: Callable[..., None]) -> list[LLMToolDefinition]:
+        """Narrow the LLM's candidate set when — and only when — the signal is confident."""
+        if decision is None:
+            return tools
+        route = getattr(decision, "route", None)
+        if route is None or not getattr(route, "narrowed", False):
+            return tools
+        allowed = set(route.candidate_tools)
+        narrowed = [definition for definition in tools if definition.name in allowed]
+        if len(narrowed) < 2 or len(narrowed) >= len(tools):
+            return tools
+        stage("decision_route", strategy="narrowed", tools=[definition.name for definition in narrowed], reason=route.reason)
+        return narrowed
+
+    def _record_disagreement(self, decision: DecisionOutcome | None, llm_tool: str | None, stage: Callable[..., None]) -> DecisionOutcome | None:
+        if decision is None:
+            return None
+        router = self.decision_router
+        if router is None or not hasattr(router, "record_disagreement"):
+            return decision
+        try:
+            updated = router.record_disagreement(decision, llm_tool)
+        except Exception:  # pragma: no cover - measurement must not break a turn
+            return decision
+        if updated is not decision and getattr(updated, "disagreement", None) is not None:
+            stage("decision_disagreement", **dict(updated.disagreement.to_dict()))
+        return updated
+
+    @staticmethod
+    def _decision_timings(decision: DecisionOutcome | None) -> dict[str, Any]:
+        if decision is None:
+            return {}
+        return {"decision_ms": round(float(getattr(decision, "latency_ms", 0.0) or 0.0), 1)}
+
+    @staticmethod
+    def _attach_decision_governance(answer: Answer | None, decision: DecisionOutcome | None) -> None:
+        """Expose the route signal to the UI without ever implying authority."""
+        if answer is None or decision is None:
+            return
+        try:
+            route = getattr(decision, "route", None)
+            escalation = getattr(decision, "escalation", None)
+            result = getattr(decision, "result", None)
+            choice = None
+            if result is not None and getattr(result, "ok", False):
+                answer_obj = result.choice("tool_route")
+                if answer_obj is not None:
+                    choice = {"tool": answer_obj.choice, "confidence": round(float(answer_obj.confidence), 4), "margin": answer_obj.margin}
+            answer.governance["decision"] = {
+                "active": True,
+                "mode": getattr(decision, "mode", ""),
+                "provider": getattr(decision, "provider", ""),
+                "model": getattr(decision, "model", ""),
+                "latency_ms": round(float(getattr(decision, "latency_ms", 0.0) or 0.0), 1),
+                "route": choice,
+                "narrowed": bool(getattr(route, "narrowed", False)),
+                "escalation_level": getattr(escalation, "level", ""),
+                "fallback": bool(getattr(decision, "fallback", False)),
+                "disagreement": (getattr(decision, "disagreement", None).to_dict() if getattr(decision, "disagreement", None) else None),
+                # The one sentence that must accompany every decision display.
+                "authority": "signal_only",
+                "notice": "إشارة القرار استشارية فقط — القرار النهائي للخادم (السياسة والتفويض والتأكيد).",
+            }
+        except Exception:  # pragma: no cover - display metadata must never break a turn
+            return
 
     # --- helpers --------------------------------------------------------------
     def _messages(self, user_input: str, history: list[dict[str, str]] | None) -> list[LLMMessage]:

@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
-STATE_MACHINE_VERSION = "1.0.0"
+STATE_MACHINE_VERSION = "1.1.0"
 
 
 def state_machine_version() -> str:
@@ -66,6 +66,7 @@ class ExecutionStage(str, Enum):
     # Execution pipeline
     RECEIVED = "received"
     PLANNED = "planned"
+    DECISION_SCREENING = "decision_screening"
     POLICY_CHECKING = "policy_checking"
     BLOCKED = "blocked"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
@@ -149,6 +150,15 @@ class ExecutionEvent(str, Enum):
     INTENT_PARSED = "intent_parsed"
     PLAN_BUILT = "plan_built"
     POLICY_EVALUATED = "policy_evaluated"
+
+    # Decision intelligence screening (plan §41). Only these four outcomes exist:
+    # a usable signal, an uncertainty signal, an escalation signal, and a
+    # recorded disagreement. None of them is an authorization decision.
+    DECISION_REQUESTED = "decision_requested"
+    DECISION_COMPLETED = "decision_completed"
+    DECISION_UNCERTAIN = "decision_uncertain"
+    DECISION_ESCALATED = "decision_escalated"
+    DECISION_DISAGREEMENT = "decision_disagreement"
     BLOCKED_BY_POLICY = "blocked_by_policy"
     PROPOSAL_ISSUED = "proposal_issued"
     CONFIRMATION_APPROVED = "confirmation_approved"
@@ -223,6 +233,35 @@ CANONICAL_TRANSITIONS: dict[tuple[ExecutionStage, ExecutionEvent], TransitionRes
 
     # --- RECEIVED → PLANNED → POLICY_CHECKING -------------------------------
     (ExecutionStage.PLANNED, ExecutionEvent.SECURITY_SCREENED): (
+        ExecutionStage.POLICY_CHECKING, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
+    ),
+
+    # --- Decision screening (additive; the pipeline may also skip straight
+    #     from PLANNED to POLICY_CHECKING when the decision layer is off) -----
+    (ExecutionStage.PLANNED, ExecutionEvent.DECISION_REQUESTED): (
+        ExecutionStage.DECISION_SCREENING, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.DECISION_COMPLETED): (
+        ExecutionStage.POLICY_CHECKING, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.DECISION_DISAGREEMENT): (
+        ExecutionStage.POLICY_CHECKING, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.DECISION_UNCERTAIN): (
+        ExecutionStage.NEEDS_CLARIFICATION, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.DECISION_ESCALATED): (
+        ExecutionStage.POLICY_CHECKING, ExecutionStatus.PENDING, SecurityStatus.STEP_UP_REQUIRED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.QUARANTINE): (
+        ExecutionStage.BLOCKED, ExecutionStatus.BLOCKED, SecurityStatus.QUARANTINED, None,
+    ),
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.SECURITY_DENIED): (
+        ExecutionStage.REJECTED, ExecutionStatus.DENIED, SecurityStatus.QUARANTINED, FinalStatus.REJECTED,
+    ),
+    # A decision signal that went missing degrades to the ordinary path instead
+    # of blocking the turn (plan §43: a Jev outage is not a MIZAN outage).
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.EXECUTION_TRANSIENT_FAILURE): (
         ExecutionStage.POLICY_CHECKING, ExecutionStatus.PENDING, SecurityStatus.SCREENED, None,
     ),
 
@@ -349,6 +388,9 @@ CANONICAL_TRANSITIONS: dict[tuple[ExecutionStage, ExecutionEvent], TransitionRes
     ),
 
     # --- Quarantine (plan §43 security) -------------------------------------
+    (ExecutionStage.DECISION_SCREENING, ExecutionEvent.CANCELLED_BY_USER): (
+        ExecutionStage.CANCELLED, ExecutionStatus.CANCELLED, SecurityStatus.SCREENED, FinalStatus.CANCELLED,
+    ),
     (ExecutionStage.POLICY_CHECKING, ExecutionEvent.QUARANTINE): (
         ExecutionStage.BLOCKED, ExecutionStatus.BLOCKED, SecurityStatus.QUARANTINED, None,
     ),
