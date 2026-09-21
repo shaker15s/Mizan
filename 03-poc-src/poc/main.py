@@ -6,7 +6,7 @@ import json
 import sys
 from typing import Any, Callable
 
-from poc.agent_runtime import AgentResult, CONFIRMATION_REQUIRED, CONFIRMED_EXECUTION
+from poc.agent_runtime import AgentResult, CONFIRMATION_REQUIRED, CONFIRMED_EXECUTION, public_decision_view
 from poc.bootstrap import build_runtime
 
 _SUCCESS_STATUSES = {"accepted", "replay"}
@@ -69,6 +69,9 @@ def _build_payload(result: AgentResult) -> dict[str, Any]:
         "request_id": gateway_result.request_id if gateway_result is not None else None,
         "tool": gateway_result.tool_name if gateway_result is not None else (result.tool_call.name if result.tool_call else None),
     }
+    # Additive, secret-free decision signal. Always present so the UI never has
+    # to guess; ``authority: signal_only`` is the one claim it is allowed to make.
+    payload["decision"] = public_decision_view(getattr(result, "decision", None))
     return payload
 
 

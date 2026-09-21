@@ -593,6 +593,14 @@ html[data-theme="dark"] .brand-mark { color: #06231f; }
 .gov-cell.copyable { cursor: copy; }
 .gov-cell.copyable:hover .mono { color: var(--accent); }
 .gov-link { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--accent); font: inherit; font-family: var(--font-mono); padding: 0; text-decoration: underline dotted; }
+.gov-decision {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--line));
+}
+.gov-decision b { color: var(--accent-ink); font-weight: 600; }
 
 .card-utils { display: flex; gap: var(--sp-1); flex-wrap: wrap; opacity: .55; transition: opacity .2s; }
 .answer-card:hover .card-utils, .answer-card:focus-within .card-utils, .proposal-card:hover .card-utils { opacity: 1; }

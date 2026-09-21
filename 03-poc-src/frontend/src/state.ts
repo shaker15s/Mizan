@@ -14,7 +14,22 @@ export type Status =
   | "confirmed_execution"
   | "replay"
   | "conflict"
-  | "text_only";
+  | "text_only"
+  | "decision_quarantined"
+  | "decision_clarification";
+
+export interface DecisionSignal {
+  active: boolean;
+  authority: "signal_only";
+  notice?: string;
+  mode?: string;
+  provider?: string;
+  latency_ms?: number;
+  route?: { tool?: string; confidence?: number; margin?: number } | null;
+  narrowed?: boolean;
+  escalation_level?: string;
+  fallback?: boolean;
+}
 
 export interface Turn {
   id: string;
@@ -25,6 +40,7 @@ export interface Turn {
   tool?: string | null;
   error_code?: string | null;
   created_at: string;
+  decision?: DecisionSignal | null;
 }
 
 export interface ProposalSnapshot {

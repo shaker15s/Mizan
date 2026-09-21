@@ -81,6 +81,55 @@ CONFIRMATION_AMENDED = "confirmation_amended"
 DECISION_QUARANTINED = "decision_quarantined"
 DECISION_CLARIFICATION = "decision_clarification"
 
+# The one sentence that must accompany every public decision display. Never
+# imply the layer approved, authorized, executed, or verified anything.
+DECISION_AUTHORITY = "signal_only"
+DECISION_AUTHORITY_NOTICE = (
+    "إشارة القرار استشارية فقط — القرار النهائي للخادم (السياسة والتفويض والتأكيد)."
+)
+
+
+def public_decision_view(decision: DecisionOutcome | None) -> dict[str, Any]:
+    """Secret-free, authority-labelled view of a turn's decision signal.
+
+    Always includes ``authority: signal_only``. Never includes user text, raw
+    answers, API keys, or anything that could be read as an authorization.
+    """
+    if decision is None:
+        return {
+            "active": False,
+            "authority": DECISION_AUTHORITY,
+            "notice": DECISION_AUTHORITY_NOTICE,
+        }
+    route = getattr(decision, "route", None)
+    escalation = getattr(decision, "escalation", None)
+    result = getattr(decision, "result", None)
+    choice = None
+    if result is not None and getattr(result, "ok", False):
+        answer_obj = result.choice("tool_route")
+        if answer_obj is not None:
+            choice = {
+                "tool": answer_obj.choice,
+                "confidence": round(float(answer_obj.confidence), 4),
+                "margin": answer_obj.margin,
+            }
+    disagreement = getattr(decision, "disagreement", None)
+    return {
+        "active": True,
+        "mode": getattr(decision, "mode", "") or "",
+        "provider": getattr(decision, "provider", "") or "",
+        "model": getattr(decision, "model", "") or "",
+        "latency_ms": round(float(getattr(decision, "latency_ms", 0.0) or 0.0), 1),
+        "route": choice,
+        "narrowed": bool(getattr(route, "narrowed", False)),
+        "strategy": getattr(route, "strategy", "") or "",
+        "escalation_level": getattr(escalation, "level", "") or "",
+        "fallback": bool(getattr(decision, "fallback", False)),
+        "disagreement": disagreement.to_dict() if disagreement is not None else None,
+        "authority": DECISION_AUTHORITY,
+        "notice": DECISION_AUTHORITY_NOTICE,
+    }
+
 # Arabic response templates keyed by gateway result status. The Answer composer
 # is the primary renderer; these remain the one-line fallback used when a
 # payload shape predates the composer (and are asserted by the truthfulness
@@ -251,6 +300,22 @@ class AgentRuntime:
 
     def set_llm_client(self, client: LLMClientProtocol) -> None:
         self.llm_client = client
+
+    def set_decision_router(self, router: Any) -> None:
+        """Hot-swap the decision layer. Closes the previous router if it differs.
+
+        Identity, the gateway, and authorization are untouched. A ``None``
+        router is the off path (identical to the un-integrated baseline).
+        """
+        previous = self.decision_router
+        self.decision_router = router
+        if previous is not None and previous is not router:
+            closer = getattr(previous, "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:  # a stale provider must not block reconfigure
+                    pass
 
     # --- prompt / tools -------------------------------------------------------
     def _tool_definitions(self) -> list[LLMToolDefinition]:
@@ -679,29 +744,7 @@ class AgentRuntime:
         if answer is None or decision is None:
             return
         try:
-            route = getattr(decision, "route", None)
-            escalation = getattr(decision, "escalation", None)
-            result = getattr(decision, "result", None)
-            choice = None
-            if result is not None and getattr(result, "ok", False):
-                answer_obj = result.choice("tool_route")
-                if answer_obj is not None:
-                    choice = {"tool": answer_obj.choice, "confidence": round(float(answer_obj.confidence), 4), "margin": answer_obj.margin}
-            answer.governance["decision"] = {
-                "active": True,
-                "mode": getattr(decision, "mode", ""),
-                "provider": getattr(decision, "provider", ""),
-                "model": getattr(decision, "model", ""),
-                "latency_ms": round(float(getattr(decision, "latency_ms", 0.0) or 0.0), 1),
-                "route": choice,
-                "narrowed": bool(getattr(route, "narrowed", False)),
-                "escalation_level": getattr(escalation, "level", ""),
-                "fallback": bool(getattr(decision, "fallback", False)),
-                "disagreement": (getattr(decision, "disagreement", None).to_dict() if getattr(decision, "disagreement", None) else None),
-                # The one sentence that must accompany every decision display.
-                "authority": "signal_only",
-                "notice": "إشارة القرار استشارية فقط — القرار النهائي للخادم (السياسة والتفويض والتأكيد).",
-            }
+            answer.governance["decision"] = public_decision_view(decision)
         except Exception:  # pragma: no cover - display metadata must never break a turn
             return
 
@@ -845,6 +888,7 @@ class AgentRuntime:
                 timings=result_timings,
                 engine=result.engine,
                 repaired=result.repaired,
+                decision=result.decision,
             )
         return result
 
@@ -1075,6 +1119,8 @@ __all__ = [
     "CONFIRMED_EXECUTION",
     "CONFIRMATION_DECLINED",
     "CONFIRMATION_AMENDED",
+    "DECISION_AUTHORITY",
+    "DECISION_AUTHORITY_NOTICE",
     "DENIED",
     "INVALID_ARGUMENTS",
     "MALFORMED_TOOL_CALL",
@@ -1082,4 +1128,5 @@ __all__ = [
     "TEXT_ONLY",
     "TOOL_CALL",
     "UNKNOWN_TOOL_REJECTED",
+    "public_decision_view",
 ]

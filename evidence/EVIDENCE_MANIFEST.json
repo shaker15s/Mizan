@@ -220,6 +220,34 @@
         "A live-provider calibration run is required before quoting any Jev accuracy or latency figure."
       ],
       "artifacts_note": "03-poc-src/data/reports/ is gitignored by repository convention; those artifacts are regenerated with the commands in the `command` field plus `python scripts/compare_decision_reports.py`. 03-poc-src/data/decision-calibration.json and the scenario/split documents are tracked."
+    },
+    {
+      "evidence_id": "EV-007-cockpit-ci-followthrough",
+      "timestamp": "2026-09-21T15:42:28Z",
+      "command": "cd 03-poc-src && python -m pytest tests/ -q && python scripts/build_decision_artifacts.py --check && python -m poc.harness doctor && python -m poc.harness run --decision-provider mock --jev-mode advisory --jev-profile oracle --no-repeat --format json --quiet && python -m poc.harness run --decision-provider mock --jev-mode enforcing --jev-profile oracle --no-repeat --format json --quiet",
+      "mode": "deterministic (no network, synthetic provider)",
+      "python_version": "3.11.2",
+      "os": "Linux/x86_64",
+      "environment": "sandbox",
+      "erp_version": "n/a (seeded ERP double; live-Odoo integration tests auto-skip)",
+      "model_provider": "n/a (FakeLLM scripted in deterministic mode)",
+      "model_id": "FakeLLM (scripted)",
+      "policy_version": "users.yaml v1",
+      "tool_registry_version": "1.1.0 (5 tools)",
+      "scenario_dataset_version": "2.0 (144 cases)",
+      "harness_version": "poc.harness 2.0.0",
+      "results": {
+        "pytest": "594 passed, 5 skipped",
+        "artifacts_check": "up to date",
+        "doctor": "17 ok · 1 warning · 0 blockers",
+        "decision_advisory_mock": "144/144 PASS · exit 0",
+        "decision_enforcing_mock": "144/144 PASS · exit 0"
+      },
+      "notes": "Cockpit/API follow-through after PR #3: public decision view on chat/health/telemetry, hot-apply of decision.*, vanilla + canonical React chips labelled signal_only. CI YAML adds mock advisory then enforcing after pytest. No live Jev numbers.",
+      "caveats": [
+        "Mock-provider runs are machinery gates, not a measurement of Jev.",
+        "Pushing .github/workflows/** requires the GitHub workflows permission."
+      ]
     }
   ]
 }

@@ -7,9 +7,9 @@
 **ERP ينفذ أوامرك بالعربي — بصلاحيات، وتأكيد، وتدقيق.**
 *(An Arabic-first agentic ERP where AI executes real business operations through a deterministic, permission-aware, audited gateway — not a chatbot.)*
 
-[![CI](https://img.shields.io/badge/CI-pytest-10b981?style=flat-square)](https://github.com/shaker15s/Mizan/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-442_passing-blue?style=flat-square)](03-poc-src/tests/)
-[![Eval](https://img.shields.io/badge/eval_harness-50%2F50_PASS-10b981?style=flat-square)](03-poc-src/HARNESS.md)
+[![CI](https://img.shields.io/badge/CI-pytest%20%2B%20mock%20decision-10b981?style=flat-square)](https://github.com/shaker15s/Mizan/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-594_passing-blue?style=flat-square)](03-poc-src/tests/)
+[![Eval](https://img.shields.io/badge/eval_harness-144%2F144_PASS-10b981?style=flat-square)](03-poc-src/HARNESS.md)
 [![Live Eval](https://img.shields.io/badge/live_eval-GO_WITH_CONDITIONS-f59e0b?style=flat-square)](02-poc/LIVE_MODEL_EVALUATION_REPORT.md)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](03-poc-src/requirements.txt)
 [![Zero Frameworks](https://img.shields.io/badge/frameworks-0-7c3aed?style=flat-square)](#why-zero-frameworks)
@@ -61,8 +61,8 @@ PYTHONPATH=. POC_USER_ID=sales_user@test ODOO_URL=http://127.0.0.1:8069 \
 Run the tests and the eval gate:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q                     # 442 passed, 5 skipped (integration auto-skip)
-PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat   # 50/50 · exit 0
+.venv/bin/python -m pytest tests/ -q                     # 594 passed, 5 skipped (integration auto-skip)
+PYTHONPATH=. .venv/bin/python -m poc.harness --mode deterministic --no-repeat   # 144/144 · exit 0
 ```
 
 > **The harness is the product's seatbelt.** Everything it grades — governance, latency
@@ -82,7 +82,7 @@ cd 03-poc-src && PYTHONPATH=. .venv/bin/python -m poc.harness --mode determinist
 | Metric (144-case dataset) | Result |
 |---|---|
 | Cases passing every gate | **144/144 · verdict PASS · exit 0** |
-| pytest | **587 passed · 5 skipped** (live-Odoo integration auto-skips) |
+| pytest | **594 passed · 5 skipped** (live-Odoo integration auto-skips) |
 | Unauthorized writes · duplicate orders | **0 · 0** |
 | Audit coverage · hash chain | **100% · valid** |
 | Idempotency conflict detected | **yes (3/3 replay cases)** |

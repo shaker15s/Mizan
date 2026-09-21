@@ -1,6 +1,6 @@
 // Thin typed client for the Mizan backend. No secrets stored in the client;
 // auth is handled via HttpOnly session cookies supplied by the server.
-import type { ConversationState, Turn, ProposalSnapshot, Status } from "./state";
+import type { ConversationState, Turn, ProposalSnapshot, Status, DecisionSignal } from "./state";
 
 export interface ApiError extends Error {
   status: number;
@@ -43,6 +43,7 @@ function _turn(role: Turn["role"], text: string, extra: Partial<Turn> = {}): Tur
     tool: extra.tool ?? null,
     error_code: extra.error_code ?? null,
     created_at: new Date().toISOString(),
+    decision: extra.decision ?? null,
   };
 }
 
@@ -54,6 +55,20 @@ export interface ChatResponse {
   tool?: string | null;
   error?: { code?: string; message?: string } | null;
   session_id: string;
+  decision?: DecisionSignal | null;
+}
+
+export interface DecisionHealth {
+  success: boolean;
+  decision: {
+    enabled: boolean;
+    authority: string;
+    authority_notice?: string;
+    provider?: string;
+    mode?: string;
+    config?: { provider?: string; mode?: string; model?: string | null };
+    refusal_reason?: string;
+  };
 }
 
 function _mergeTurns(prev: Turn[], user: Turn, assistant: Turn): Turn[] {
@@ -67,6 +82,9 @@ export const api = {
   me(): Promise<{ user_id: string; tenant_id: string; role: string }> {
     return request("/api/me");
   },
+  decision(): Promise<DecisionHealth> {
+    return request("/api/decision");
+  },
   async send(state: ConversationState, text: string): Promise<ConversationState> {
     const payload = await request<ChatResponse>("/api/chat", {
       method: "POST",
@@ -78,6 +96,7 @@ export const api = {
       tool: payload.tool ?? null,
       proposal: payload.proposal ?? null,
       error_code: payload.error?.code ?? null,
+      decision: payload.decision ?? null,
     });
     return {
       ...state,

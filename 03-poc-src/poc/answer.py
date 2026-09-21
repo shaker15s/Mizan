@@ -254,9 +254,21 @@ class Answer:
         if self.next_steps:
             lines.extend(["### 🔜 خطوات تالية", ""] + [f"- {action.label}" for action in self.next_steps] + [""])
         if self.governance:
-            bits = ", ".join(f"{key}: {value}" for key, value in self.governance.items() if value not in (None, "", False))
+            bits: list[str] = []
+            for key, value in self.governance.items():
+                if value in (None, "", False):
+                    continue
+                if key == "decision" and isinstance(value, dict):
+                    bits.append(
+                        "decision: signal_only"
+                        + (f" {value.get('provider')}/{value.get('mode')}" if value.get("active") else " off")
+                    )
+                    continue
+                if isinstance(value, (dict, list)):
+                    continue
+                bits.append(f"{key}: {value}")
             if bits:
-                lines.append(f"<sub>🛡️ {bits}</sub>")
+                lines.append(f"<sub>🛡️ {', '.join(bits)}</sub>")
         return "\n".join(lines).strip()
 
     def to_text(self) -> str:
