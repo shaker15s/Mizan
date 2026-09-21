@@ -15,6 +15,7 @@ from poc.db.init import DEFAULT_DB_PATH, initialize
 from poc.gateway import ToolGateway
 from poc.llm_client import LLMClientProtocol, build_llm_client
 from poc.odoo_client import OdooConfig, OdooJSON2Client
+from poc.settings import get_settings
 from poc.tool_contracts import get_registry
 
 SRC_ROOT = Path(__file__).resolve().parents[1]
@@ -83,7 +84,7 @@ def build_decision_router_from_settings(settings=None, *, registry=None, evidenc
     settings (or explicitly passed here).
     """
     settings = settings or get_settings()
-    return build_router(
+    return build_decision_router(
         settings=settings,
         registry=registry or get_registry(),
         evidence_store=evidence_store,

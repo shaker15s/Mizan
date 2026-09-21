@@ -49,8 +49,8 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from poc.agent_runtime import AgentRuntime
-from poc.bootstrap import build_llm_client_from_settings, build_runtime
+from poc.agent_runtime import AgentRuntime, public_decision_view
+from poc.bootstrap import build_decision_router_from_settings, build_llm_client_from_settings, build_runtime
 from poc.integrations import EVENT_ORDER_DECLINED, EVENT_ORDER_EXECUTED, catalog as integration_catalog, deliver as deliver_event
 from poc.main import _build_payload
 from poc.odoo_client import get_circuit_breaker
@@ -287,18 +287,47 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
         *view*: nothing here can change identity, policy, or the gateway.
         """
         runtime = getattr(self, "runtime", None)
-        router = getattr(runtime, "decision_router", None)
-        if router is None:
-            return {
-                "enabled": False,
-                "reason": "decision layer not wired",
-                "authority": "signal_only",
-                "authority_notice": "The decision layer cannot authorize, execute, approve, or verify.",
-            }
-        try:
-            return dict(router.health())
-        except Exception as error:  # noqa: BLE001 - health must never 500
-            return {"enabled": False, "error": type(error).__name__, "authority": "signal_only"}
+        getter = getattr(runtime, "decision_health", None)
+        if callable(getter):
+            try:
+                payload = dict(getter())
+            except Exception as error:  # noqa: BLE001 - health must never 500
+                return {"enabled": False, "error": type(error).__name__, "authority": "signal_only"}
+        else:
+            router = getattr(runtime, "decision_router", None)
+            if router is None:
+                payload = {
+                    "enabled": False,
+                    "reason": "decision layer not wired",
+                    "authority": "signal_only",
+                }
+            else:
+                try:
+                    payload = dict(router.health())
+                except Exception as error:  # noqa: BLE001 - health must never 500
+                    return {"enabled": False, "error": type(error).__name__, "authority": "signal_only"}
+        payload.setdefault("authority", "signal_only")
+        payload.setdefault(
+            "authority_notice",
+            "The decision layer cannot authorize, execute, approve, or verify. Server policy remains authoritative.",
+        )
+        return payload
+
+    def _decision_summary(self) -> dict[str, Any]:
+        """Compact, secret-free chip for /api/health and /api/telemetry."""
+        health = self._decision_health()
+        config = health.get("config") if isinstance(health.get("config"), Mapping) else {}
+        return {
+            "enabled": bool(health.get("enabled")),
+            "provider": config.get("provider") or health.get("provider") or "off",
+            "mode": config.get("mode") or health.get("mode") or "off",
+            "model": config.get("model") or health.get("model"),
+            "authority": "signal_only",
+            "authority_notice": health.get("authority_notice")
+            or "The decision layer cannot authorize, execute, approve, or verify.",
+            "unofficial": bool(config.get("unofficial")),
+            "refusal_reason": str(health.get("refusal_reason") or health.get("reason") or health.get("error") or ""),
+        }
 
     def _send_json(self, status: int, data: Mapping[str, Any]) -> None:
         self._set_headers(status)
@@ -460,6 +489,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "engine": self.runtime.engine,
                 "prompt_version": PROMPT_VERSION,
                 "settings_version": self.settings.version,
+                "decision": self._decision_summary(),
             },
         )
 
@@ -612,6 +642,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "sqlite_wal_mode": True,
                     "policy_source": "users.yaml (server-owned, not model-editable)",
                 },
+                "decision": self._decision_summary(),
             },
         )
 
@@ -783,6 +814,7 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
             "session_id": session_id,
             "meta": {"engine": "slash", "timings": {}, "stages": [{"stage": "slash", "tool": outcome.tool_name}], "tool": outcome.tool_name},
             "ui_action": outcome.action,
+            "decision": public_decision_view(None),
         }
         if outcome.gateway_result is not None and outcome.gateway_result.proposal is not None:
             payload["proposal"] = dict(outcome.gateway_result.proposal)
@@ -918,6 +950,22 @@ class ERPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.runtime.set_llm_client(build_llm_client_from_settings(self.settings))
                 except Exception as error:
                     LOGGER.warning("LLM hot-swap failed (keeping previous client): %s", error)
+        if any(str(key).startswith("decision.") for key in changed):
+            # Rebuild the router from the typed store. Identity, the gateway and
+            # authorization stay put — only the additive signal layer is swapped.
+            try:
+                new_router = build_decision_router_from_settings(
+                    self.settings,
+                    registry=getattr(self.runtime, "registry", None),
+                    evidence_store=getattr(self.runtime, "evidence_store", None),
+                )
+                setter = getattr(self.runtime, "set_decision_router", None)
+                if callable(setter):
+                    setter(new_router)
+                else:
+                    self.runtime.decision_router = new_router
+            except Exception as error:
+                LOGGER.warning("Decision-layer hot-swap failed (keeping previous router): %s", error)
         self.runtime.reconfigure(
             dialect=str(self.settings.get("agent.dialect", "ar-EG")),
             response_style=str(self.settings.get("agent.response_style", "balanced")),

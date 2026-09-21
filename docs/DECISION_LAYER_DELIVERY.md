@@ -91,19 +91,15 @@ monotonic safety, redaction, cache, router failure paths, artifacts, runtime
 integration) and 19 harness tests (metric honesty, gate sections, rendering,
 synthetic labelling, a real 4-case mock run, and the armed-refusal test).
 
-> **CI note.** The workflow change is authored but cannot be pushed by the
-> automation identity used here (GitHub rejects workflow edits from an app
-> without the `workflows` permission). Add these two steps after `pytest tests/ -q`
-> in `.github/workflows/ci.yml` (kept in `docs/` so it is not lost):
+> **CI.** `.github/workflows/ci.yml` now runs, after pytest: artifact `--check`,
+> `harness doctor`, then mock advisory and mock enforcing (`--no-repeat --format json --quiet`).
+> These are machinery gates (one pass per golden case), not a 3× stability
+> measurement, and they are deterministic / offline / zero-cost. Pushing the
+> workflow file still requires the GitHub `workflows` permission; if the App
+> cannot update `.github/workflows/**`, apply the same YAML as a human.
 >
-> ```yaml
->       - name: Decision layer (offline, mock provider)
->         run: python -m poc.harness run --decision-provider mock --jev-mode advisory --jev-profile oracle --format json --quiet
->       - name: Decision layer gates (enforcing)
->         run: python -m poc.harness run --decision-provider mock --jev-mode enforcing --jev-profile oracle --format json --quiet
-> ```
->
-> Both runs are deterministic, offline and zero-cost, so they are safe for CI.
+> Frontend provenance (health chip + per-turn `authority: signal_only` badge) is
+> now on both cockpits: vanilla `poc/web/` and canonical `03-poc-src/frontend/`.
 
 ## 5. Harness results
 

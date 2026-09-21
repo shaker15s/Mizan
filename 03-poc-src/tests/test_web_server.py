@@ -202,3 +202,165 @@ def test_api_replay_simulation(test_server):
     assert status == 409
     assert data["status"] == "conflict"
     assert data["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+
+def _assert_signal_only(blob: object) -> None:
+    text = json.dumps(blob, ensure_ascii=False)
+    assert "api_key" not in text
+    assert "TYPESAFE" not in text
+    assert "sk-" not in text
+    dumped = json.dumps(blob).lower()
+    # The layer may mention that it cannot authorize; it must never claim it did.
+    assert "authorized this" not in dumped
+    assert "jev approved" not in dumped
+
+
+def test_api_decision_health_off_by_default(test_server):
+    base_url, _ = test_server
+    status, data, _ = http_get(f"{base_url}/api/decision")
+    assert status == 200
+    assert data["success"] is True
+    decision = data["decision"]
+    assert decision["authority"] == "signal_only"
+    assert decision.get("enabled") in {False, None} or decision.get("enabled") is False
+    _assert_signal_only(data)
+
+
+def test_api_health_and_telemetry_include_decision(test_server):
+    base_url, _ = test_server
+    status, health, _ = http_get(f"{base_url}/api/health")
+    assert status == 200
+    assert health["decision"]["authority"] == "signal_only"
+    assert health["decision"]["enabled"] is False
+    status, telemetry, _ = http_get(f"{base_url}/api/telemetry")
+    assert status == 200
+    assert telemetry["decision"]["authority"] == "signal_only"
+    assert telemetry["decision"]["provider"] in {"off", None, "mock"}
+    _assert_signal_only(health)
+    _assert_signal_only(telemetry)
+
+
+def test_api_chat_carries_inactive_decision_when_off(test_server):
+    base_url, _ = test_server
+    status, data, _ = http_post(f"{base_url}/api/chat", {"message": "ابحث عن محمد"})
+    assert status == 200
+    assert data["status"] == "accepted"
+    decision = data["decision"]
+    assert decision["active"] is False
+    assert decision["authority"] == "signal_only"
+    _assert_signal_only(data)
+
+
+def test_api_decision_health_never_500(test_server):
+    base_url, server = test_server
+
+    class Boom:
+        def health(self):
+            raise RuntimeError("provider exploded")
+
+    server.runtime.decision_router = Boom()
+    status, data, _ = http_get(f"{base_url}/api/decision")
+    assert status == 200
+    assert data["success"] is True
+    assert data["decision"]["authority"] == "signal_only"
+
+
+@pytest.fixture
+def isolated_server(tmp_path, monkeypatch):
+    """A cockpit bound to its own SettingsStore so hot-apply tests cannot leak."""
+    monkeypatch.setenv("MIZAN_DEV", "1")
+    from poc.settings import SettingsStore
+
+    db_path = tmp_path / "web_decision.db"
+    initialize(db_path)
+    store = SettingsStore(path=tmp_path / "settings.json")
+    gateway = ToolGateway(db_path=db_path)
+    fake_odoo = SeededFakeOdoo()
+    llm = FakeLLMClient(
+        responses=[
+            LLMResponse(
+                text=None,
+                tool_calls=[
+                    LLMToolCall(
+                        name="customer.search",
+                        arguments={"query": "محمد"},
+                        call_id="call_001",
+                    )
+                ],
+            )
+        ]
+    )
+    runtime = AgentRuntime(
+        llm_client=llm,
+        gateway=gateway,
+        user_id="sales_user@test",
+        tenant_id="poc_tenant_001",
+        odoo_client_factory=lambda u, t: fake_odoo,
+        settings=store,
+        evidence_store=getattr(gateway, "evidence_store", None),
+    )
+    server = ERPWebServer(("127.0.0.1", 0), runtime, settings=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}", server, store
+    server.shutdown()
+    server.server_close()
+
+
+def test_hot_apply_enables_mock_decision_layer(isolated_server):
+    base_url, server, _store = isolated_server
+    status, before, _ = http_get(f"{base_url}/api/decision")
+    assert status == 200
+    assert before["decision"].get("enabled") is False
+
+    status, applied, _ = http_post(
+        f"{base_url}/api/settings",
+        {"settings": {"decision.provider": "mock", "decision.mode": "advisory"}},
+    )
+    assert status == 200
+    assert not applied.get("errors")
+    assert "decision.provider" in applied.get("changed", [])
+    assert "decision.mode" in applied.get("changed", [])
+
+    status, after, _ = http_get(f"{base_url}/api/decision")
+    assert status == 200
+    decision = after["decision"]
+    assert decision["enabled"] is True
+    assert decision["authority"] == "signal_only"
+    config = decision.get("config") or {}
+    assert (config.get("provider") or decision.get("provider")) == "mock"
+    assert (config.get("mode") or decision.get("mode")) == "advisory"
+    _assert_signal_only(after)
+
+    status, chat, _ = http_post(f"{base_url}/api/chat", {"message": "ابحث عن محمد"})
+    assert status == 200
+    signal = chat["decision"]
+    assert signal["active"] is True
+    assert signal["authority"] == "signal_only"
+    assert signal["provider"] == "mock"
+    assert "notice" in signal
+    _assert_signal_only(chat)
+    # Hot-apply must never touch identity.
+    assert server.runtime.user_id == "sales_user@test"
+    assert server.runtime.tenant_id == "poc_tenant_001"
+
+
+def test_decision_health_masks_configured_key(isolated_server):
+    base_url, _server, _store = isolated_server
+    status, applied, _ = http_post(
+        f"{base_url}/api/settings",
+        {
+            "settings": {
+                "decision.api_key": "sk-super-secret-key-123456",
+                "decision.provider": "mock",
+                "decision.mode": "shadow",
+            }
+        },
+    )
+    assert status == 200
+    status, data, _ = http_get(f"{base_url}/api/decision")
+    assert status == 200
+    blob = json.dumps(data) + json.dumps(applied)
+    assert "sk-super-secret-key-123456" not in blob
+    assert "super-secret" not in blob
+    _assert_signal_only(data)

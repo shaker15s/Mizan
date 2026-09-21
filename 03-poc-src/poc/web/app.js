@@ -202,6 +202,12 @@ function renderStatusbar(data) {
     stat("Circuit", breaker.state || "closed", breaker.state === "open" ? "bad" : breaker.state === "half_open" ? "warn" : "ok", icon("shield", 13)),
     stat("الجلسة", `${sessions.turns ?? 0} لفة`, "", icon("user", 13)),
     stat("Uptime", shorten(data.uptime_human || "—", 18), "", icon("clock", 13)),
+    (() => {
+      const decision = data.decision || {};
+      const enabled = Boolean(decision.enabled);
+      const label = enabled ? `${decision.provider || "on"}/${decision.mode || ""}` : "متوقفة";
+      return stat("إشارة القرار", label.trim(), enabled ? "warn" : "", icon("scale", 13));
+    })(),
     latency.length > 1
       ? el("span", { class: "stat" }, el("span", { class: "mono" }, `p50 ${ms(median(latency))}`), sparkline(latency.slice(-20)))
       : null,
@@ -302,17 +308,24 @@ function beginLiveTurn(intent) {
 const stageWord = (name) =>
   ({
     intake: "استلمت طلبك",
-    llm_call: "بafsّر النية",
-    schema_validation: "بchecking عقد الأداة",
-    authz: "بأتشهر على صلاحياتك",
+    llm_call: "بيفهم طلبك",
+    schema_validation: "بيتحقق من عقد الأداة",
+    authz: "بيشوف الصلاحيات",
     await_signature: "محتاج توقيعك",
-    execute: "بتنفيذ على Odoo",
-    verification: "براجع رد Odoo",
-    audit: "بكتب في سلسلة التدقيق",
-    answer: "بجهز الكارت",
-    narrative_start: "بكتب القراءة التحليلية",
+    execute: "بينفذ على Odoo",
+    verification: "بيراجع رد Odoo",
+    audit: "بيكتب في سلسلة التدقيق",
+    answer: "بيجهز الكارت",
+    narrative_start: "بيكتب القراءة التحليلية",
     slash_command: "أمر مباشر",
-    repair_attempt: "بصلح الطلب",
+    repair_attempt: "بيصلح الطلب",
+    decision_screening: "إشارة القرار بتتراجع",
+    decision_done: "إشارة القرار خلصت",
+    decision_route: "بتضيّق قائمة الأدوات",
+    decision_quarantine: "حجر أمني — مفيش تنفيذ",
+    decision_clarification: "محتاج توضيح قبل التنفيذ",
+    decision_disagreement: "الإشارة والنموذج اختلفوا",
+    decision_error: "إشارة القرار مش متاحة",
   })[name] || "شغال";
 
 function renderAnswerNode(payload, { intent = "" } = {}) {
@@ -724,6 +737,27 @@ function renderContextPanel() {
       el("h4", { class: "panel-title" }, el("span", {}, "الاتصال"), statusBadge(odoo.online ? "accepted" : "error", odoo.online ? "ERP online" : "ERP offline")),
       el("div", { class: "grid-2" }, keyValue("قاعدة البيانات", el("span", { class: "mono", dir: "ltr" }, odoo.database || "—")), keyValue("زمن الاستجابة", `${num(odoo.latency_ms ?? 0, 1)} ms`), keyValue("النقل", shorten(odoo.transport || "—", 26)), keyValue("breaker", (data.circuit_breaker || {}).state || "closed")),
     ),
+    (() => {
+      const decision = data.decision || {};
+      const enabled = Boolean(decision.enabled);
+      return el(
+        "div",
+        { class: "card card-compact" },
+        el(
+          "h4",
+          { class: "panel-title" },
+          el("span", {}, "إشارة القرار"),
+          statusBadge(enabled ? "pending" : "text_only", enabled ? `${decision.provider || "on"}/${decision.mode || ""}` : "متوقفة"),
+        ),
+        el("p", { class: "panel-sub", dir: "auto" }, decision.authority_notice || "إشارة استشارية فقط — لا تُصرّح ولا تُنفّذ ولا تُؤكّد. القرار النهائي للخادم."),
+        el(
+          "div",
+          { class: "grid-2" },
+          keyValue("المزوّد", el("span", { class: "mono", dir: "ltr" }, decision.provider || "off")),
+          keyValue("الوضع", decision.mode || "off"),
+        ),
+      );
+    })(),
     quickPromptsCard(),
   );
 }

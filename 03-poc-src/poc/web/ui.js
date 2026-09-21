@@ -163,6 +163,8 @@ const STATUS_TONES = {
   text_only: "neutral",
   unknown_tool_rejected: "danger",
   invalid_arguments: "danger",
+  decision_quarantined: "danger",
+  decision_clarification: "warn",
 };
 
 export function statusBadge(status, label) {
@@ -393,8 +395,24 @@ const GOVERNANCE_LABELS = {
 export function governanceFooter(governance, handlers = {}) {
   if (!governance || !Object.keys(governance).length) return null;
   const row = el("div", { class: "governance" });
-  const entries = Object.entries(governance).filter(([, value]) => value !== null && value !== undefined && value !== "" && !Array.isArray(value));
+  const entries = Object.entries(governance).filter(([, value]) => value !== null && value !== undefined && value !== "");
   for (const [key, value] of entries) {
+    if (key === "decision" && value && typeof value === "object" && !Array.isArray(value)) {
+      const active = Boolean(value.active);
+      const detail = active
+        ? [value.provider, value.mode, value.route?.tool, value.latency_ms != null ? ms(value.latency_ms) : null].filter(Boolean).join(" · ")
+        : "متوقفة";
+      row.append(
+        el(
+          "span",
+          { class: "gov-cell gov-decision", title: value.notice || "إشارة استشارية فقط — القرار النهائي للخادم." },
+          el("b", {}, active ? "إشارة القرار · استشارية فقط" : "إشارة القرار"),
+          el("span", { class: "mono", dir: "ltr" }, detail || "signal_only"),
+        ),
+      );
+      continue;
+    }
+    if (Array.isArray(value) || (value && typeof value === "object")) continue;
     const label = GOVERNANCE_LABELS[key] || key.replace(/_/g, " ");
     let display = value;
     if (key.endsWith("_ms")) display = ms(value);
@@ -690,6 +708,13 @@ const STAGE_LABELS = {
   llm_error: ["مشكلة في النموذج", "alert"],
   erp_error: ["رجع ERP", "alert"],
   slash_command: ["أمر مباشر", "keyboard"],
+  decision_screening: ["إشارة القرار", "scale"],
+  decision_done: ["إشارة القرار خلصت", "check"],
+  decision_route: ["تضييق الأدوات", "tools"],
+  decision_quarantine: ["حجر أمني", "shield"],
+  decision_clarification: ["طلب توضيح", "search"],
+  decision_disagreement: ["اختلاف الإشارة", "alert"],
+  decision_error: ["إشارة غير متاحة", "alert"],
 };
 
 export function pipelineStepper(container, stages, activeStage) {

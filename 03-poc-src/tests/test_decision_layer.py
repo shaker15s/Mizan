@@ -664,3 +664,18 @@ class TestRuntimeIntegration:
         result = runtime.process("هاتلي أحمد")
         assert result.decision is None
         assert result.outcome == "tool_call"
+
+    def test_public_decision_view_never_implies_authority(self, environment):
+        from poc.agent_runtime import public_decision_view
+
+        off = public_decision_view(None)
+        assert off["active"] is False
+        assert off["authority"] == "signal_only"
+        router = mock_router(MockDecisionClient(default=SCENARIOS["confident_correct"], use_rules=False))
+        runtime = environment.runtime(llm_client=_fake_llm("customer.search"), user_id="sales_user@test", decision_router=router)
+        result = runtime.process("هاتلي أحمد")
+        view = public_decision_view(result.decision)
+        assert view["authority"] == "signal_only"
+        assert "api_key" not in json.dumps(view)
+        assert view["active"] is True
+        assert result.answer.governance["decision"]["authority"] == "signal_only"

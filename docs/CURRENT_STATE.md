@@ -1,8 +1,8 @@
-# CURRENT_STATE — MIZAN POC as of commit `6b10c12` (+ uncommitted work)
+# CURRENT_STATE — MIZAN POC as of commit `69a1c52` (+ cockpit/CI follow-through)
 
 **Generated:** 2026-09-21
-**Commit:** `6b10c12` (working tree includes the decision-layer work)
-**Baseline evidence:** `/evidence/EVIDENCE_MANIFEST.json` → EV-001 … EV-006
+**Commit:** `69a1c52` (PR #3 on `main`) plus the cockpit/API/CI follow-through on this branch
+**Baseline evidence:** `/evidence/EVIDENCE_MANIFEST.json` → EV-001 … EV-007
 
 > Numbers below were re-verified on 2026-09-21 against the working tree. Where an
 > older figure appears later in the document, the tables in §1 and §6 are the
@@ -172,7 +172,7 @@ There is **no single canonical state machine** today. State is split across seve
 Re-verified 2026-09-21 (EV-006):
 
 ```text
-pytest:        587 passed, 0 failed, 5 skipped (live-Odoo integration)
+pytest:        594 passed, 0 failed, 5 skipped (live-Odoo integration)
 harness det:   144/144 PASS (dataset v2.0)
 decision:      baseline/shadow/advisory/heldout/enforcing PASS (synthetic provider)
                realistic (negative control) GATE FAIL · adversarial (negative control) FAIL
@@ -274,3 +274,11 @@ and is wired into the runtime, the web server, and the harness:
 * **Evaluation:** the same 144 golden cases, three synthetic provider profiles,
   a three-way comparison artifact, and per-mode release gates
   (`decision_any` / `decision_shadow` / `decision_advisory` / `decision_enforcing`).
+* **Public surface:** every chat payload carries a compact `decision` view with
+  `authority: signal_only`. `/api/health` and `/api/telemetry` expose a secret-free
+  chip. Settings that touch `decision.*` hot-swap the router without touching
+  identity or the gateway. Vanilla and canonical React cockpits render the chip
+  as a warning/info badge, never as an approval.
+* **CI:** after pytest, mock advisory then mock enforcing harness runs
+  (`--no-repeat`) plus `build_decision_artifacts.py --check`. No live Jev figures
+  are published until a real-key shadow + recalibrate + held-out.

@@ -4,6 +4,34 @@ All notable changes to Mizan. Dates are Egyptian; the format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-ish, and every entry lists
 the command that proves it.
 
+## [2026-09-21] — decision signal on the cockpit, hot-apply, CI mock gates
+
+### Added
+- Compact, secret-free `decision` field on every chat payload (`authority: signal_only`).
+- `/api/health` and `/api/telemetry` chips for the decision layer (never an approval).
+- Hot-apply of `decision.*` settings rebuilds the router without touching identity or the gateway.
+- Vanilla cockpit: governance footer special-cases the decision dict, statusbar chip, stage labels.
+- Canonical React (`03-poc-src/frontend/`): `GET /api/decision` + per-turn signal chip.
+- CI after pytest: artifact `--check`, harness doctor, mock advisory then mock enforcing (`--no-repeat`).
+
+### Fixed
+- `build_decision_router_from_settings` called an unbound `build_router` name.
+- Narrative attach dropped `decision=` on the intermediate `AgentResult`.
+- Governance markdown no longer stringifies nested objects as `[object Object]`.
+
+### Proof
+```
+$ cd 03-poc-src && python -m pytest tests/ -q
+594 passed, 5 skipped
+$ python scripts/build_decision_artifacts.py --check
+[artifacts] up to date
+$ python -m poc.harness run --decision-provider mock --jev-mode advisory --jev-profile oracle --no-repeat --format json --quiet
+144/144 PASS · exit 0
+$ python -m poc.harness run --decision-provider mock --jev-mode enforcing --jev-profile oracle --no-repeat --format json --quiet
+144/144 PASS · exit 0
+```
+No live Jev numbers are claimed.
+
 ## [2026-09-20] — phases 6–9: execution store, policy 2.0, evidence graph, API hardening
 
 ### Added

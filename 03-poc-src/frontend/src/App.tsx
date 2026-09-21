@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import type { ConversationState, Status, Turn } from "./state";
+import type { ConversationState, DecisionSignal, Status, Turn } from "./state";
 
 
 function statusTone(s: Status | undefined): "ok" | "warn" | "bad" | "neutral" {
@@ -16,14 +16,24 @@ function statusTone(s: Status | undefined): "ok" | "warn" | "bad" | "neutral" {
     case "erp_error":
     case "validation_error":
     case "conflict":
+    case "decision_quarantined":
       return "bad";
+    case "decision_clarification":
+      return "warn";
     default:
       return "neutral";
   }
 }
 
+function signalLabel(signal: DecisionSignal | null | undefined): string | null {
+  if (!signal?.active) return null;
+  const bits = ["إشارة · استشارية فقط", signal.provider, signal.mode, signal.route?.tool].filter(Boolean);
+  return bits.join(" · ");
+}
+
 function TurnBubble({ turn }: { turn: Turn }) {
   const tone = statusTone(turn.status);
+  const signal = signalLabel(turn.decision);
   return (
     <article className={`turn turn-${turn.role} tone-${tone}`}>
       <header>
@@ -31,6 +41,7 @@ function TurnBubble({ turn }: { turn: Turn }) {
         {turn.status ? <span className={`badge tone-${tone}`}>{turn.status}</span> : null}
       </header>
       <div className="bubble" dir="auto">{turn.text}</div>
+      {signal ? <p className="signal-note" title={turn.decision?.notice}>{signal}</p> : null}
     </article>
   );
 }
@@ -41,6 +52,7 @@ export function App() {
   const [input, setInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [decisionChip, setDecisionChip] = useState<string>("إشارة: …");
 
   useEffect(() => {
     api.me()
@@ -56,6 +68,14 @@ export function App() {
         }),
       )
       .catch((e) => setError(String(e)));
+    api.decision()
+      .then((payload) => {
+        const d = payload.decision || {};
+        const provider = d.config?.provider || d.provider || "off";
+        const mode = d.config?.mode || d.mode || "off";
+        setDecisionChip(d.enabled ? `إشارة: ${provider}/${mode} · استشارية فقط` : "إشارة: متوقفة");
+      })
+      .catch(() => setDecisionChip("إشارة: —"));
   }, [sessionId]);
 
   async function submit(text: string) {
@@ -109,6 +129,7 @@ export function App() {
         <div className="meta">
           <span>مستخدم: <bdo dir="ltr">{state?.user_id ?? "…"}</bdo></span>
           <span>الحالة: <em>{state?.status ?? "…"}</em></span>
+          <span className="signal-chip" title="إشارة القرار لا تُصرّح ولا تُنفّذ ولا تُؤكّد.">{decisionChip}</span>
         </div>
       </header>
       {error ? <div className="error-banner" role="alert">{error}</div> : null}
